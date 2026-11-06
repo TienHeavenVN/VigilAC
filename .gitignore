@@ -4,3 +4,8 @@ out/
 *.class
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
+
+# Live test harness artifacts
+integration/server/
+integration/out/
+integration/live.pid

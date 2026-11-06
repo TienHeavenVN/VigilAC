@@ -1,0 +1,11 @@
+{
+  "name": "vigilac-livetest-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "In-house protocol bot harness for VigilAC live testing. NOT a real modified client; see docs/LIVE_TEST_RESULTS.md.",
+  "main": "bot.js",
+  "license": "MIT",
+  "dependencies": {
+    "mineflayer": "^4.39.0"
+  }
+}
