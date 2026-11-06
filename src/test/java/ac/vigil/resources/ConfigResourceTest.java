@@ -54,6 +54,31 @@ class ConfigResourceTest {
             assertTrue(reach.containsKey(key), "checks.reach." + key + " is required by the code");
         }
 
+        Map<String, List<String>> requiredTuning = Map.of(
+                "fly", List.of("min-hover-millis", "hover-tolerance", "min-upward-ticks", "vl-per-observation"),
+                "timer", List.of("threshold-per-second", "min-excess-millis", "excess-vl-per-second"),
+                "no-fall", List.of("min-fall-distance", "damage-grace-millis", "min-suspicious-landings", "vl-per-landing"),
+                "invalid-movement", List.of("max-vertical-delta", "vl-per-impossibility"),
+                "kill-aura", List.of("window-millis", "min-targets", "vl-per-trigger"),
+                "auto-clicker", List.of("cps-cap", "min-samples", "robotic-mean-max", "robotic-stddev-max",
+                        "robotic-min-samples", "robotic-min-streak", "vl-per-trigger"),
+                "aim-assist", List.of("snap-angular-delta", "snap-angle-to-target", "snap-max-interval-millis",
+                        "min-snap-streak", "vl-per-snap"),
+                "scaffold", List.of("max-angle-degrees", "min-streak", "vl-per-placement"),
+                "fast-place", List.of("max-per-second", "window-millis", "vl-per-placement"),
+                "fast-break", List.of("min-impossible-streak", "vl-per-trigger", "unbreakable-vl")
+        );
+        for (Map.Entry<String, List<String>> entry : requiredTuning.entrySet()) {
+            Map<String, Object> section = castMap(checks.get(entry.getKey()));
+            assertNotNull(section, "checks." + entry.getKey() + " section is required by the code");
+            for (String key : List.of("enabled", "alert-vl", "warn-vl", "kick-vl", "max-vl")) {
+                assertTrue(section.containsKey(key), "checks." + entry.getKey() + "." + key + " is required");
+            }
+            for (String key : entry.getValue()) {
+                assertTrue(section.containsKey(key), "checks." + entry.getKey() + "." + key + " is required by the code");
+            }
+        }
+
         Map<String, Object> violations = castMap(root.get("violations"));
         assertTrue(violations.containsKey("decay-per-second"));
         assertTrue(violations.containsKey("decay-delay-seconds"));

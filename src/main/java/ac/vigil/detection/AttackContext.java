@@ -19,6 +19,9 @@ public final class AttackContext {
     private final boolean targetInVehicle;
     private final int pingMillis;
     private final long timestamp;
+    private final String targetUniqueId;
+    private final float yaw;
+    private final float pitch;
 
     private AttackContext(Builder b) {
         this.attacker = b.attacker;
@@ -37,6 +40,9 @@ public final class AttackContext {
         this.targetInVehicle = b.targetInVehicle;
         this.pingMillis = b.pingMillis;
         this.timestamp = b.timestamp;
+        this.targetUniqueId = b.targetUniqueId == null ? "" : b.targetUniqueId;
+        this.yaw = b.yaw;
+        this.pitch = b.pitch;
     }
 
     public java.util.UUID getAttacker() { return attacker; }
@@ -55,6 +61,12 @@ public final class AttackContext {
     public boolean isTargetInVehicle() { return targetInVehicle; }
     public int getPingMillis() { return pingMillis; }
     public long getTimestamp() { return timestamp; }
+    /** Stable identity of the damaged entity (UUID string); empty if unavailable. */
+    public String getTargetUniqueId() { return targetUniqueId; }
+    /** Attacker rotation at the moment of the swing (degrees, MC convention). */
+    public float getYaw() { return yaw; }
+    /** Attacker pitch at the moment of the swing (degrees, negative = looking up). */
+    public float getPitch() { return pitch; }
 
     /**
      * Distance from the attacker's eye position to the closest point on the
@@ -78,6 +90,8 @@ public final class AttackContext {
         private boolean creativeOrSpectator, attackerInVehicle, targetInVehicle;
         private int pingMillis;
         private long timestamp = System.currentTimeMillis();
+        private String targetUniqueId = "";
+        private float yaw, pitch;
 
         public Builder attacker(java.util.UUID attacker) { this.attacker = attacker; return this; }
         public Builder targetType(String targetType) { this.targetType = targetType; return this; }
@@ -92,6 +106,9 @@ public final class AttackContext {
         public Builder targetInVehicle(boolean targetInVehicle) { this.targetInVehicle = targetInVehicle; return this; }
         public Builder pingMillis(int pingMillis) { this.pingMillis = pingMillis; return this; }
         public Builder timestamp(long timestamp) { this.timestamp = timestamp; return this; }
+        public Builder targetUniqueId(String targetUniqueId) { this.targetUniqueId = targetUniqueId; return this; }
+        public Builder yaw(float yaw) { this.yaw = yaw; return this; }
+        public Builder pitch(float pitch) { this.pitch = pitch; return this; }
 
         public AttackContext build() {
             if (attacker == null) {

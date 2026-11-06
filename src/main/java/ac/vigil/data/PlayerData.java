@@ -14,6 +14,10 @@ public final class PlayerData {
 
     private final UUID uuid;
     private final long joinTimeMillis;
+    private final ac.vigil.data.tracking.MovementTracker movement = new ac.vigil.data.tracking.MovementTracker();
+    private final ac.vigil.data.tracking.CombatTracker combat = new ac.vigil.data.tracking.CombatTracker();
+    private final ac.vigil.data.tracking.BlockActionTracker blockActions = new ac.vigil.data.tracking.BlockActionTracker();
+    private volatile long lastDamageAt;
 
     /** VL per check name. */
     private final Map<String, Double> violationLevels = new HashMap<>();
@@ -221,6 +225,27 @@ public final class PlayerData {
 
     public double getPacketsPerSecond() {
         return packetsPerSecond;
+    }
+
+    public ac.vigil.data.tracking.MovementTracker movementTracker() {
+        return movement;
+    }
+
+    public ac.vigil.data.tracking.CombatTracker combatTracker() {
+        return combat;
+    }
+
+    public ac.vigil.data.tracking.BlockActionTracker blockActionTracker() {
+        return blockActions;
+    }
+
+    /** Records the last time this player took damage (any EntityDamageEvent, main thread). */
+    public void setLastDamageAt(long epochMillis) {
+        this.lastDamageAt = epochMillis;
+    }
+
+    public long getLastDamageAt() {
+        return lastDamageAt;
     }
 
     public boolean isDebug() {

@@ -36,6 +36,9 @@ public final class DetectionContext {
     private final int pingMillis;
     private final double serverTps;
     private final long timestamp;
+    private final double movePacketsPerSecond;
+    private final boolean levitation;
+    private final boolean slowFalling;
 
     private DetectionContext(Builder b) {
         this.player = b.player;
@@ -66,6 +69,9 @@ public final class DetectionContext {
         this.pingMillis = b.pingMillis;
         this.serverTps = b.serverTps;
         this.timestamp = b.timestamp;
+        this.movePacketsPerSecond = b.movePacketsPerSecond;
+        this.levitation = b.levitation;
+        this.slowFalling = b.slowFalling;
     }
 
     public java.util.UUID getPlayer() { return player; }
@@ -96,6 +102,11 @@ public final class DetectionContext {
     public int getPingMillis() { return pingMillis; }
     public double getServerTps() { return serverTps; }
     public long getTimestamp() { return timestamp; }
+    public double getMovePacketsPerSecond() { return movePacketsPerSecond; }
+    /** True while the Levitation potion effect is active (vanilla upward motion otherwise indistinguishable from fly). */
+    public boolean isLevitation() { return levitation; }
+    /** True while Slow Falling is active (vanilla reduced gravity otherwise indistinguishable from hover). */
+    public boolean isSlowFalling() { return slowFalling; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -110,6 +121,8 @@ public final class DetectionContext {
         private int pingMillis;
         private double serverTps = 20.0D;
         private long timestamp = System.currentTimeMillis();
+        private double movePacketsPerSecond = 20.0D;
+        private boolean levitation, slowFalling;
 
         public Builder player(java.util.UUID player) { this.player = player; return this; }
         public Builder worldName(String worldName) { this.worldName = worldName == null ? "" : worldName; return this; }
@@ -130,6 +143,9 @@ public final class DetectionContext {
         public Builder pingMillis(int pingMillis) { this.pingMillis = pingMillis; return this; }
         public Builder serverTps(double serverTps) { this.serverTps = serverTps; return this; }
         public Builder timestamp(long timestamp) { this.timestamp = timestamp; return this; }
+        public Builder movePacketsPerSecond(double movePacketsPerSecond) { this.movePacketsPerSecond = movePacketsPerSecond; return this; }
+        public Builder levitation(boolean levitation) { this.levitation = levitation; return this; }
+        public Builder slowFalling(boolean slowFalling) { this.slowFalling = slowFalling; return this; }
 
         public DetectionContext build() {
             if (player == null) {

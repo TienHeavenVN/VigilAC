@@ -48,6 +48,126 @@ checks:
     # Samples used for the windowed (linearly weighted) reach average.
     ema-samples: 6
 
+  fly:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 20.0
+    max-vl: 25.0
+    # Airborne time before hover/rise evidence accrues. Jumps peak at ~1.3s.
+    min-hover-millis: 3000
+    # Max accumulated |vertical motion| still considered "hovering".
+    hover-tolerance: 0.6
+    # Consecutive upward vertical ticks that count as "rising flight".
+    min-upward-ticks: 10
+    vl-per-observation: 1.0
+  timer:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 20.0
+    max-vl: 25.0
+    # Vanilla sends combined position/rotation packets at 20/s.
+    threshold-per-second: 21.5
+    # Only sustained excess this long produces VL.
+    min-excess-millis: 3000
+    excess-vl-per-second: 2.0
+  no-fall:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Vanilla fall damage begins above 3 blocks; 3.5 is the safe flag line.
+    min-fall-distance: 3.5
+    # Any damage event within this window of the landing suppresses evidence.
+    damage-grace-millis: 500
+    # Consecutive suspicious landings required before VL accrues.
+    min-suspicious-landings: 3
+    vl-per-landing: 1.5
+  invalid-movement:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 20.0
+    max-vl: 25.0
+    # Above vanilla terminal velocity (3.92 blocks/tick at 78.4 m/s).
+    max-vertical-delta: 4.25
+    vl-per-impossibility: 4.0
+  kill-aura:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Window in which distinct damaged entities are counted.
+    window-millis: 1000
+    # Distinct entities damaged within the window that mark an aura.
+    # Attack cooldown caps full-damage swings at ~1.6/s; even spam cannot re-aim
+    # between this many separate entities within the window.
+    min-targets: 3
+    vl-per-trigger: 1.0
+  auto-clicker:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Hardware ceiling is ~20 CPS; flag sustain above this.
+    cps-cap: 20.5
+    min-samples: 10
+    # Robotic-window gate: humans have stddev 40-120ms; clickers are metronomic.
+    robotic-mean-max: 150.0
+    robotic-stddev-max: 12.0
+    robotic-min-samples: 10
+    robotic-min-streak: 5
+    vl-per-trigger: 1.0
+  aim-assist:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Rotation snap size that counts as an aim teleport between two attacks.
+    snap-angular-delta: 45.0
+    # The swing must land within this bearing of the target center.
+    snap-angle-to-target: 6.0
+    # Attacks closer together than this can be part of one snap.
+    snap-max-interval-millis: 120
+    min-snap-streak: 4
+    vl-per-snap: 1.0
+  scaffold:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Placements whose angle from the look vector exceeds this are "out of view".
+    max-angle-degrees: 80.0
+    min-streak: 6
+    vl-per-placement: 1.0
+  fast-place:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # 1.18+ block-use cooldown caps legit placement at 5/s; 7 tolerates batching.
+    max-per-second: 7.0
+    window-millis: 2000
+    vl-per-placement: 1.0
+  fast-break:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Consecutive breaks faster than the vanilla lower bound before VL accrues.
+    min-impossible-streak: 3
+    vl-per-trigger: 1.0
+    # Hard VL for completing server-unbreakable material.
+    unbreakable-vl: 6.0
+
 violations:
   # How much VL decays per second once the decay delay has elapsed.
   decay-per-second: 1.0

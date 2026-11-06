@@ -63,6 +63,7 @@ public final class AttackListener implements Listener {
 
         org.bukkit.Location eye = attacker.getEyeLocation();
         org.bukkit.Location targetLoc = target.getLocation();
+        org.bukkit.Location attackerLoc = attacker.getLocation();
         double halfWidth = target.getWidth() / 2.0D;
         double height = target.getHeight();
 
@@ -82,9 +83,15 @@ public final class AttackListener implements Listener {
                 .targetInVehicle(target.isInsideVehicle())
                 .pingMillis(attacker.getPing())
                 .timestamp(System.currentTimeMillis())
+                .targetUniqueId(target.getUniqueId().toString())
+                .yaw(attackerLoc.getYaw())
+                .pitch(attackerLoc.getPitch())
                 .build();
 
         PlayerData data = dataManager.load(attacker.getUniqueId());
+        // Combat statistics are recorded exactly once per attack here, not per
+        // check, so CPS/interval windows are never double counted.
+        data.combatTracker().recordAttack(context.getTimestamp());
         checkManager.evaluateAttack(context, data, pipeline.forPlayer(attacker, data));
     }
 }

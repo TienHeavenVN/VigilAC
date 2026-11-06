@@ -62,14 +62,19 @@ public final class PlayerMoveListener implements Listener {
         org.bukkit.entity.Player player = event.getPlayer();
         VigilACConfig cfg = config.get();
 
+        PlayerData data = dataManager.load(player.getUniqueId());
+        // Every move packet counts toward the timer rate, including rotation-only
+        // ones; counted before any early return so the ring is never biased.
+        long nowPacket = System.currentTimeMillis();
+        data.movementTracker().noteMovePacket(nowPacket);
+        double movePacketsPerSecond = data.movementTracker().movePacketsPerSecond(nowPacket);
+
         if (player.hasPermission(cfg.exemptPermission())) {
             return;
         }
         if (exemptions.isExempt(player.getUniqueId(), ExemptionManager.ALL)) {
             return;
         }
-
-        PlayerData data = dataManager.load(player.getUniqueId());
 
         // Relative teleports inside one event: mark grace and skip.
         if (from.distanceSquared(to) > cfg.teleportThreshold() * cfg.teleportThreshold()) {
@@ -82,10 +87,15 @@ public final class PlayerMoveListener implements Listener {
         boolean slippery = isSlippery(feet.getType());
 
         int speedLevel = 0;
+        boolean levitation = false;
+        boolean slowFalling = false;
         for (PotionEffect effect : player.getActivePotionEffects()) {
             if (effect.getType() == PotionEffectType.SPEED) {
                 speedLevel = effect.getAmplifier() + 1;
-                break;
+            } else if (effect.getType() == PotionEffectType.LEVITATION) {
+                levitation = true;
+            } else if (effect.getType() == PotionEffectType.SLOW_FALLING) {
+                slowFalling = true;
             }
         }
 
@@ -109,6 +119,9 @@ public final class PlayerMoveListener implements Listener {
                 .teleportGrace(data.isTeleportGrace())
                 .knockbackGrace(data.isKnockbackGrace())
                 .speedPotionLevel(speedLevel)
+                .movePacketsPerSecond(movePacketsPerSecond)
+                .levitation(levitation)
+                .slowFalling(slowFalling)
                 .pingMillis(player.getPing())
                 .serverTps(tps)
                 .timestamp(System.currentTimeMillis())

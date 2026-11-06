@@ -4,8 +4,18 @@ import java.io.File;
 import ac.vigil.alert.AlertManager;
 import ac.vigil.check.CheckManager;
 import ac.vigil.check.ViolationPipeline;
+import ac.vigil.check.combat.AimAssistCheck;
+import ac.vigil.check.combat.AutoClickerCheck;
+import ac.vigil.check.combat.KillAuraCheck;
 import ac.vigil.check.combat.ReachCheck;
+import ac.vigil.check.movement.FlyCheck;
+import ac.vigil.check.movement.InvalidMovementCheck;
+import ac.vigil.check.movement.NoFallCheck;
 import ac.vigil.check.movement.SpeedCheck;
+import ac.vigil.check.movement.TimerCheck;
+import ac.vigil.check.player.FastBreakCheck;
+import ac.vigil.check.player.FastPlaceCheck;
+import ac.vigil.check.player.ScaffoldCheck;
 import ac.vigil.command.VigilACCommand;
 import ac.vigil.config.CheckSettings;
 import ac.vigil.config.VigilACConfig;
@@ -13,7 +23,10 @@ import ac.vigil.data.PlayerData;
 import ac.vigil.data.PlayerDataManager;
 import ac.vigil.exempt.ExemptionManager;
 import ac.vigil.listener.AttackListener;
+import ac.vigil.listener.BlockBreakListener;
+import ac.vigil.listener.BlockPlaceListener;
 import ac.vigil.listener.ConfounderListener;
+import ac.vigil.listener.PistonConfounderListener;
 import ac.vigil.listener.PlayerJoinQuitListener;
 import ac.vigil.listener.PlayerMoveListener;
 import ac.vigil.packet.PacketEventsHook;
@@ -46,6 +59,9 @@ public final class VigilAC extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         this.config = new VigilACConfig(this);
+        for (String problem : config.validate()) {
+            getLogger().warning("Config: " + problem);
+        }
 
         this.exemptionManager = new ExemptionManager();
         this.playerDataManager = new PlayerDataManager();
@@ -105,6 +121,9 @@ public final class VigilAC extends JavaPlugin {
     public void reloadConfiguration() {
         reloadConfig();
         this.config = new VigilACConfig(this);
+        for (String problem : config.validate()) {
+            getLogger().warning("Config: " + problem);
+        }
         getLogger().info("Configuration reloaded (mode=" + (config.isAlertOnly() ? "alert-only" : "punish") + ")");
     }
 
@@ -122,6 +141,56 @@ public final class VigilAC extends JavaPlugin {
                 cfg.reachMinAttacksOver(),
                 cfg.reachVlPerAttackOver(),
                 cfg.reachEmaSamples()));
+        // Movement
+        checkManager.register(new FlyCheck(
+                cfg.flyMinHoverMillis(),
+                cfg.flyHoverTolerance(),
+                cfg.flyMinUpwardTicks(),
+                cfg.flyVlPerObservation()));
+        checkManager.register(new TimerCheck(
+                cfg.timerThresholdPerSecond(),
+                cfg.timerMinExcessMillis(),
+                cfg.timerExcessVlPerSecond()));
+        checkManager.register(new NoFallCheck(
+                cfg.noFallMinFallDistance(),
+                cfg.noFallDamageGraceMillis(),
+                cfg.noFallMinSuspiciousLandings(),
+                cfg.noFallVlPerLanding()));
+        checkManager.register(new InvalidMovementCheck(
+                cfg.invalidMaxVerticalDelta(),
+                cfg.invalidVlPerImpossibility()));
+        // Combat
+        checkManager.register(new KillAuraCheck(
+                cfg.killAuraWindowMillis(),
+                cfg.killAuraMinTargets(),
+                cfg.killAuraVlPerTrigger()));
+        checkManager.register(new AutoClickerCheck(
+                cfg.autoClickerCpsCap(),
+                cfg.autoClickerMinSamples(),
+                cfg.autoClickerRoboticMeanMax(),
+                cfg.autoClickerRoboticStddevMax(),
+                cfg.autoClickerRoboticMinSamples(),
+                cfg.autoClickerRoboticMinStreak(),
+                cfg.autoClickerVlPerTrigger()));
+        checkManager.register(new AimAssistCheck(
+                cfg.aimAssistSnapAngularDelta(),
+                cfg.aimAssistSnapAngleToTarget(),
+                cfg.aimAssistSnapMaxIntervalMillis(),
+                cfg.aimAssistMinSnapStreak(),
+                cfg.aimAssistVlPerSnap()));
+        // Player
+        checkManager.registerPlace(new ScaffoldCheck(
+                cfg.scaffoldMaxAngleDegrees(),
+                cfg.scaffoldMinStreak(),
+                cfg.scaffoldVlPerPlacement()));
+        checkManager.registerPlace(new FastPlaceCheck(
+                cfg.fastPlaceMaxPerSecond(),
+                cfg.fastPlaceWindowMillis(),
+                cfg.fastPlaceVlPerPlacement()));
+        checkManager.registerBreak(new FastBreakCheck(
+                cfg.fastBreakMinImpossibleStreak(),
+                cfg.fastBreakVlPerTrigger(),
+                cfg.fastBreakUnbreakableVl()));
     }
 
     private CheckSettings settingsFor(String checkName) {
