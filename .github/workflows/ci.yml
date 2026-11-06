@@ -208,7 +208,7 @@ jobs:
           grep -q 'Done (' server.log || { echo "::error title=ServerTimeout::server did not report ready in 240s"; tail -n 60 server.log; exit 1; }
           grep -q 'Enabling VigilAC' server.log || { echo "::error title=PluginNotEnabled::Enabling VigilAC not found in server.log"; exit 1; }
 
-      - name: RCON: plugins, vigilac info, vigilac violations
+      - name: "RCON: plugins, vigilac info, vigilac violations"
         run: |
           python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci plugins > rcon-plugins.txt
           cat rcon-plugins.txt
