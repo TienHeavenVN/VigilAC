@@ -59,27 +59,23 @@ def main() -> int:
             return 3
 
         send_packet(sock, 2, REQUEST_COMMAND, command)
-        # Sentinel packet: a *command* (same packet type as a command) with an
-        # empty payload. The server responds to it normally, which delimits the
-        # command's response. (A SERVERDATA_RESPONSE_VALUE-typed sentinel was
-        # previously used here; Paper's RCON loop treats unknown client packet
-        # types unpredictably - in the worst case the connection dies before the
-        # real command is processed. That race made the CI pad build silently
-        # fail. The command type is safe.)
-        send_packet(sock, 3, REQUEST_COMMAND, "")
+        # RCON has no end-of-response marker. Drain packets until the server
+        # goes quiet: Paper answers a no-op/unknown command either with an
+        # empty payload or with no packet at all, so no sentinel is used here
+        # (an unanswered sentinel previously deadlocked the client for 10s and
+        # discarded the command's response entirely).
+        sock.settimeout(2.0)
         chunks = []
         while True:
-            request_id, packet_type, payload = read_packet(sock)
-            if request_id == 3:
+            try:
+                request_id, packet_type, payload = read_packet(sock)
+            except (socket.timeout, TimeoutError, EOFError, OSError):
                 break
             if request_id == 2:
                 chunks.append(payload)
         sys.stdout.write("".join(chunks))
         sys.stdout.flush()
         return 0
-    except (socket.timeout, TimeoutError):
-        print("timed out waiting for server response", file=sys.stderr)
-        return 5
     except (EOFError, OSError) as exc:
         print(f"connection lost: {exc}", file=sys.stderr)
         return 6
