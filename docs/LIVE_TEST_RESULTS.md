@@ -123,3 +123,27 @@ Both legs: pad anchor confirmed in every scenario log (`RCON pos -> ... 64.0d ..
 - Concurrent-players/load testing (§Phase 3 #6 beyond CI soak of 20 scenarios × 2 legs): no sustained load harness in CI; unit suite covers async DB enqueue/flush paths (Phase 2).
 - Multi-world, portals, Bedrock cross-play, ViaVersion — not tested.
 - ≥10 concurrent bots per server — not tested.
+
+## 9. Phase 3 acceptance coverage map
+
+| Requirement (Phase 3 master task) | Status | Where |
+|---|---|---|
+| Paper 1.21.8 + Java 21, latest Phase 2 build | **Done** | `integration/paper.sh`, CI `Build and test` |
+| PacketEvents installed AND absent (CI matrix) | **Done** | `packetevents: ['0','1']` matrix, both legs green |
+| Separate legitimate and modified client accounts | **Partial** — disposable offline-mode accounts per scenario (both kinds), not per-player accounts for external clients | `bot.js` |
+| Isolated server per run; exact build/config recorded | **Done** | §2 |
+| Alert-only preserved; never auto-ban | **Done** (verified: no kick/ban in any log; `mode: alert`) | §2 |
+| Meteor / LiquidBounce / Wurst verified | **UNABLE-TO-TEST** | §1 |
+| Legit: sprint/jump/swim | **Done (swim NOT covered)** — sprint-jump, stand, place-bridge, break-stone, attack-zombie, knockback, respawn, teleport (+ all under latency); **no swim scenario exists** | scenario list |
+| Legit: knockback/velocity | **Done** — `legit-knockback` (zero VL every run) | §6 |
+| Legit: teleport/respawn | **Done** | §6 |
+| Legit: high latency/jitter | **Done** — dedicated `-lat` pass at 120 ms ± 30 ms netem; no -lat scenario produced a FAIL annotation in the reference run | §3, §5 |
+| Legit: temporary TPS degradation | **NOT TESTED** — no low-TPS injection in this phase | §6 |
+| Metrics: detection rate, FP rate, latency, VL progression, TPS, ping, packet evidence, reproducible cases | **Done** — VL snapshots per bot, debug digests, RawSample artifacts, TPS/ping in every debug line; sprint-jump FP root-caused and fixed via latency pass | §6 |
+| Confirmed bugs have regression tests | **Done** — `SpeedCheckTest#backlogBurstDoesNotFabricateSpeed`, `sustainedSprintCheatStillFlags`, `legitSprintJumpNeverFlags`, `MovementTrackerTest` (3) | §7 |
+| 86+ tests remain passing | **Done** — CI `Build and test` SUCCESS (92 tests) on every push | CI `42255620165` |
+| Paper integration green | **Done** — smoke job SUCCESS; 12-version compat SUCCESS | CI `42255620165` |
+| Default stays alert-only | **Done** | §2 |
+| No production-readiness claim without real-client evidence | **Done** — §1 | §1 |
+| Regression tests for confirmed bugs | **Done** (re-run per CI) | §7 |
+| Reproducible configs/scripts | **Done** — `integration/` (paper.sh, run.sh, scenarios.js, bots), pinned builds + sha256 | repo |
