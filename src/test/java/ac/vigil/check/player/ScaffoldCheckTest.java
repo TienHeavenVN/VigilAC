@@ -60,7 +60,7 @@ class ScaffoldCheckTest {
         for (int i = 0; i < 10; i++) {
             now += 200L;
             // Looking at +Z and placing the block at +Z: normal bridge building.
-            check.evaluate(place(0.0D, i, 0, 64, i + 1, 0.0F, -30.0F, now), data, sink());
+            check.evaluate(place(0.0D, i, 0, 64, i + 1, 0.0F, 30.0F, now), data, sink());
         }
         assertTrue(flagged.isEmpty());
     }
@@ -73,12 +73,12 @@ class ScaffoldCheckTest {
     }
 
     @Test
-    void sneakLookDownPlacementBehindPlayerFlagsButInViewDoesNot() {
+    void sneakLookDownPlacementBesidePlayerFlags() {
         long now = 1_000_000L;
-        // Looking straight down (pitch -90) and placing beside the feet: 90 degrees off view.
+        // Looking straight down (pitch +90) and placing beside the feet: ~108 degrees off view.
         for (int i = 0; i < 6; i++) {
             now += 200L;
-            check.evaluate(place(0.0D, 0.0D, 1, 64, 0, 0.0F, -90.0F, now), data, sink());
+            check.evaluate(place(0.0D, 0.0D, 1, 64, 0, 0.0F, 90.0F, now), data, sink());
         }
         assertFalse(flagged.isEmpty(), "looking straight down while placing beside you exceeds the angle gate");
     }

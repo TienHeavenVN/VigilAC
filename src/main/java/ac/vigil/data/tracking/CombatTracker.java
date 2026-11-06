@@ -95,19 +95,32 @@ public final class CombatTracker {
         return Math.sqrt(sq / intervalCount);
     }
 
-    /** Attacks recorded in the trailing {@code windowMillis} before {@code now}, scaled to per-second. */
+    /**
+     * Attacks per second over the trailing window. The rate is measured
+     * against the actual elapsed span of the attacks in the window (capped
+     * at {@code windowMillis}), not against the full window — a player who
+     * started attacking 0.4 s ago is measured over 0.4 s, never inflated.
+     */
     public synchronized double cps(long now, long windowMillis) {
         if (attackTimes.isEmpty() || windowMillis <= 0L) {
             return 0.0D;
         }
         long cutoff = now - windowMillis;
+        long oldest = -1L;
         int count = 0;
         for (Long ts : attackTimes) {
             if (ts != null && ts >= cutoff) {
+                if (oldest < 0L) {
+                    oldest = ts;
+                }
                 count++;
             }
         }
-        return count * (1_000.0D / windowMillis);
+        if (count <= 1) {
+            return count; // a lone attack carries no rate information
+        }
+        double spanSeconds = Math.max(0.05D, Math.min(windowMillis, now - oldest) / 1_000.0D);
+        return count / spanSeconds;
     }
 
     public synchronized int addRoboticStreak() {

@@ -72,7 +72,7 @@ class AutoClickerCheckTest {
     @Test
     void extremeCpsFlagsRateGate() {
         long now = 1_000_000L;
-        for (int i = 0; i < 13; i++) { // 33 ms apart: ~30 CPS, above the 20.5 hardware ceiling
+        for (int i = 0; i < 45; i++) { // 33 ms apart: ~30 CPS sustained for 1.5s, above the 20.5 ceiling
             now += 33L;
             attack(now);
         }
