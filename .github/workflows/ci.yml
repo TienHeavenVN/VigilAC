@@ -33,6 +33,15 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test --no-daemon --stacktrace
 
+      - name: Publish unit test results
+        if: always()
+        uses: dorny/test-reporter@v3
+        with:
+          name: Unit tests
+          path: build/test-results/test/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
       - name: Build shadow JAR
         run: ./gradlew shadowJar --no-daemon --stacktrace
 
