@@ -16,7 +16,7 @@ java {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:${'$'}paperApiVersion")
+    compileOnly("io.papermc.paper:paper-api:${paperApiVersion}")
     compileOnly("com.github.retrooper:packetevents-spigot:2.11.2")
     implementation("org.xerial:sqlite-jdbc:3.46.1.3")
 

@@ -36,13 +36,13 @@ jobs:
           tail -n 30 compile.log
           if [ $code -ne 0 ]; then
             python3 - <<'PYEOF'
-            import html
-            text = open('compile.log', encoding='utf8', errors='replace').read()
-            lines = [l for l in text.splitlines() if l.strip()][-12:]
-            blob = ' | '.join(lines)
-            blob = html.unescape(blob).replace('%', '%25').replace('\r', '%0D').replace('\n', ' ')
-            print('::error title=GradleBuild::' + blob[:1800])
-PYEOF
+          import html
+          text = open('compile.log', encoding='utf8', errors='replace').read()
+          lines = [l for l in text.splitlines() if l.strip()][-12:]
+          blob = ' | '.join(lines)
+          blob = html.unescape(blob).replace('%', '%25').replace('\r', ' ').replace('\n', ' ')
+          print('::error title=GradleBuild::' + blob[:1800])
+          PYEOF
             exit $code
           fi
 
@@ -169,18 +169,18 @@ PYEOF
           tail -n 25 test.log
           if [ $code -ne 0 ]; then
             python3 - <<'PYEOF'
-            import glob, re, html, os
-            found = 0
-            for f in glob.glob('build/test-results/test/*.xml'):
-                text = open(f, encoding='utf8', errors='replace').read()
-                for m in re.finditer(r'<(failure|error)[^>]*message="([^"]*)"', text):
-                    found += 1
-                    msg = html.unescape(m.group(2)).replace('\n', ' ').replace('\r', ' ')[:600]
-                    case = os.path.basename(f)[:-4]
-                    print(f'::error title={case}::{msg}')
-            if not found:
-                print('::error title=NoTestFailures::Test step failed but no failure tags were found in the XML reports')
-            PYEOF
+          import glob, re, html, os
+          found = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              text = open(f, encoding='utf8', errors='replace').read()
+              for m in re.finditer(r'<(failure|error)[^>]*message="([^"]*)"', text):
+                  found += 1
+                  msg = html.unescape(m.group(2)).replace('\n', ' ').replace('\r', ' ')[:600]
+                  case = os.path.basename(f)[:-4]
+                  print(f'::error title={case}::{msg}')
+          if not found:
+              print('::error title=NoTestFailures::Test step failed but no failure tags were found in the XML reports')
+          PYEOF
             exit $code
           fi
 
