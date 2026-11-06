@@ -32,24 +32,7 @@ const rcon = (command) => {
   return ((r.stdout || '') + (r.stderr || '')).trim();
 };
 
-/** Staff observer: op'd idle bot that captures every [VigilAC debug] chat line. */
-if (scenarioId === '__staff__') {
-  const bot = mineflayer.createBot({
-    host: '127.0.0.1', port, username, version: '1.21.8', auth: 'offline', viewDistance: 'tiny',
-  });
-  const stream = fs.createWriteStream(outPath, { flags: 'a' });
-  bot.once('spawn', () => {
-    rcon(`op ${username}`); // staff observer is op'd: exempt; must not interfere with scenarios
-    stream.write(JSON.stringify({ time: Date.now(), msg: 'OBSERVER-READY' }) + '\n');
-  });
-  bot.on('message', (msg) => {
-    stream.write(JSON.stringify({ time: Date.now(), msg: msg.toString() }) + '\n');
-  });
-  setInterval(() => {}, 60000); // keep alive
-  process.on('SIGTERM', () => { stream.end(); process.exit(0); });
-  return;
-}
-if (!scenario && scenarioId !== '__staff__') {
+if (!scenario) {
   console.error('unknown scenario:', scenarioId, 'available:', Object.keys(scenarios).join(', '));
   process.exit(2);
 }

@@ -33,10 +33,6 @@ grep -q 'Done (' server.log || { echo '::error title=ServerTimeout::no Done in 2
 grep -q 'VigilAC enabled:' server.log || { echo '::error title=PluginNotEnabled::success marker missing'; exit 1; }
 echo "server up; installing node deps"
 (cd "$ROOT/integration/bot" && npm ci --no-audit --no-fund -q) || { echo '::error title=NpmCi::bot deps failed'; exit 1; }
-echo "== starting staff observer bot =="
-: > "$RESULTS/staff-events.jsonl"
-(cd "$ROOT/integration/bot" && nohup node bot.js StaffObserver "$PORT" __staff__ "$RESULTS/staff-events.jsonl" > /dev/null 2>&1 & echo $! > "$ROOT/integration/staff.pid")
-sleep 4
 SCENARIOS=$(node -e "console.log(Object.keys(require('$ROOT/integration/bot/scenarios.js').scenarios).join(' '))")
 if [ -z "$SCENARIOS" ]; then
   echo '::error title=Harness::could not enumerate scenarios from scenarios.js'
@@ -46,9 +42,11 @@ echo "scenarios: $SCENARIOS"
 
 echo "== running scenarios =="
 pass=0; fail=0; unable=0
+: > "$RESULTS/scenario-names.txt"
 for sc in $SCENARIOS; do
   # Minecraft usernames are limited to 16 chars: B + hash(scenario) + hash(pid+random)
   botname="B$(printf '%s' "$sc" | md5sum | cut -c1-4)$(printf '%s' "$$$RANDOM$sc" | md5sum | cut -c1-6)"
+  echo "$sc $botname" >> "$RESULTS/scenario-names.txt"
   echo "--- $sc as $botname ---"
   (cd "$ROOT/integration/bot" && node bot.js "$botname" "$PORT" "$sc" "$RESULTS/$sc.json" > "$RESULTS/$sc.console.log" 2>&1)
   rc=$?
@@ -77,13 +75,6 @@ if [ "${RUN_LATENCY_PASS:-0}" = "1" ] && sudo -n true 2>/dev/null; then
 fi
 
 echo "RCON tps: $(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci tps | tail -1)"
-echo "== stopping staff observer =="
-if [ -f "$ROOT/integration/staff.pid" ]; then
-  kill "$(cat "$ROOT/integration/staff.pid")" 2>/dev/null || true
-  sleep 1
-fi
-echo "staff observer lines: $(wc -l < "$RESULTS/staff-events.jsonl" 2>/dev/null || echo 0)"
-
 echo "== stopping server =="
 python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci stop > /dev/null 2>&1 || true
 for i in $(seq 1 30); do kill -0 "$(cat "$ROOT/integration/live.pid")" 2>/dev/null || break; sleep 2; done
@@ -108,6 +99,34 @@ print('ok:', tot['ok'], 'err:', tot['err'], 'evidence empty:', tot['ev_zero'], '
 if sample:
     print('::notice title=RawSample::' + json.dumps(sample)[:1500])
 PY
+echo "== VigilAC debug digest from server log =="
+python3 - "$RESULTS" "$SRV/server.log" <<'PY'
+import re, sys, os, json, collections
+vdir, log_path = sys.argv[1], sys.argv[2]
+names = {}
+try:
+    with open(os.path.join(vdir, 'scenario-names.txt')) as fh:
+        for line in fh:
+            parts = line.split()
+            if len(parts) == 2:
+                names[parts[1]] = parts[0]
+except FileNotFoundError:
+    pass
+by_sc = collections.defaultdict(list)
+counts = collections.Counter()
+with open(log_path, errors='replace') as fh:
+    for line in fh:
+        m = re.search(r'\[VigilAC debug\] \[([a-z-]+)\] ([A-Za-z0-9_]+): (.{0,180})', line)
+        if m:
+            check, player, detail = m.group(1), m.group(2), m.group(3)
+            by_sc[names.get(player, '?')].append(f'[{check}] {player}: {detail}'[:180])
+            counts[check] += 1
+digest = ','.join(f'{k}:{v}' for k, v in counts.most_common(14))
+print('::notice title=DebugDigest::' + (digest if digest else 'NO vigilac debug lines found in server.log'))
+with open(os.path.join(vdir, 'debug-by-scenario.json'), 'w') as out:
+    json.dump(by_sc, out)
+PY
+
 echo "== scoring =="
 python3 "$ROOT/integration/score.py" "$RESULTS"
 

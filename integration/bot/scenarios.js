@@ -15,17 +15,32 @@ const define = (id, meta, fn) => { scenarios[id] = { id, kind: meta.kind, descri
 
 // ---------- helpers ----------
 
-/** Forged position/rotation packet. flags bit 0x01 = onGround. */
+// ---- ghost position ----
+// mineflayer (physics disabled) never updates bot.entity.position, so forged
+// packets carrying spawn+dx repeatedly would all be zero-delta on the server.
+// Every scenario tracks a "ghost" position, applies deltas to it, and sends
+// ABSOLUTE coordinates. The server then sees real incremental movement.
+function ghost(bot) {
+  if (!bot.__ghost) bot.__ghost = bot.entity.position.clone();
+  return bot.__ghost;
+}
+function setGhost(bot, x, y, z) { bot.__ghost = new Vec3(x, y, z); }
+
+/** Forged position/rotation packet from the ghost. flags 0x01 = onGround. */
 function forgeMove(bot, dx, dy, dz, onGround) {
-  const p = bot.entity.position;
+  const g = ghost(bot).plus(new Vec3(dx, dy, dz));
+  bot.__ghost = g;
   bot._client.write('position_look', {
-    x: p.x + dx, y: p.y + dy, z: p.z + dz,
+    x: g.x, y: g.y, z: g.z,
     yaw: bot.entity.yaw, pitch: bot.entity.pitch,
     flags: onGround ? 1 : 0,
   });
 }
 
-function setAirborne(bot) { bot._client.write('position_look', { x: bot.entity.position.x, y: bot.entity.position.y, z: bot.entity.position.z, yaw: bot.entity.yaw, pitch: bot.entity.pitch, flags: 0 }); }
+function setAirborne(bot) {
+  const g = ghost(bot);
+  bot._client.write('position_look', { x: g.x, y: g.y, z: g.z, yaw: bot.entity.yaw, pitch: bot.entity.pitch, flags: 0 });
+}
 
 /** Summon a zombie relative to the bot; returns the live zombie entity or null. */
 async function summonZombieNear(bot, api, offset, name) {
@@ -130,7 +145,7 @@ define('illegal-timer', { kind: 'illegal', description: 'movement packets at 30/
   bot.physicsEnabled = false;
   const end = Date.now() + 5000;
   for (let i = 0; i < 150; i++) {
-    forgeMove(bot, 0.002 * (i % 3), 0, 0, false);
+    forgeMove(bot, 0.05, 0, 0, false);
     await api.sleep(33);
     if (Date.now() > end) break;
   }
@@ -140,7 +155,7 @@ define('illegal-timer', { kind: 'illegal', description: 'movement packets at 30/
 define('illegal-overspeed', { kind: 'illegal', description: 'horizontal speed ~6.2 blocks/s for 4s (sprint cap 5.61)', expect: ['speed'] }, async (bot, api) => {
   bot.physicsEnabled = false;
   for (let i = 0; i < 40; i++) {
-    forgeMove(bot, 0.62, -0.05, 0, false);
+    forgeMove(bot, 0.62, 0, 0, true);
     await api.sleep(100);
   }
   api.result.evidence.push('moved +0.62 blocks/packet at 10 Hz (~6.2 b/s)');
@@ -151,7 +166,7 @@ define('illegal-fly-hover', { kind: 'illegal', description: 'constant altitude a
   // leave the ground once, then hold the altitude
   forgeMove(bot, 0, 1.2, 0, false);
   for (let i = 0; i < 45; i++) {
-    setAirborne(bot);
+    forgeMove(bot, 0.01, 0, 0, false);
     await api.sleep(100);
   }
   api.result.evidence.push('held constant altitude airborne for 4.5s');
@@ -163,19 +178,26 @@ define('illegal-invalid-vertical', { kind: 'illegal', description: 'vertical del
     forgeMove(bot, 0, 5.0, 0, false);
     await api.sleep(100);
   }
+  for (let i = 0; i < 4; i++) {
+    forgeMove(bot, 0, -5.0, 0, false);
+    await api.sleep(100);
+  }
   api.result.evidence.push('vertical delta 5.0 x4');
 });
 
-define('illegal-nofall', { kind: 'illegal', description: 'three 7-block falls, no damage events', expect: ['no-fall'] }, async (bot, api) => {
+define('illegal-nofall', { kind: 'illegal', description: 'three falls > 7 blocks, no damage events', expect: ['no-fall'] }, async (bot, api) => {
   bot.physicsEnabled = false;
   for (let landing = 0; landing < 3; landing++) {
-    api.rcon(`execute at ${api.result.username} run tp ${api.result.username} ~ ~7 ~`);
+    const g = ghost(bot);
+    const tx = g.x, ty = g.y + 7.5, tz = g.z;
+    api.rcon(`tp ${api.result.username} ${tx} ${ty} ${tz}`);
+    setGhost(bot, tx, ty, tz);
     await api.sleep(700);
     for (let i = 0; i < 6; i++) {
       forgeMove(bot, 0, -1.2, 0, false);
       await api.sleep(50);
     }
-    forgeMove(bot, 0, -0.1, 0, true); // touch down
+    forgeMove(bot, 0, -0.3, 0, true); // touch down
     await api.sleep(800);
     api.result.evidence.push('fall ' + (landing + 1) + ' completed');
   }
