@@ -1,10 +1,14 @@
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("com.github.spotbugs") version "6.0.27"
 }
 
 group = "ac.vigil"
 version = "1.0.0"
+
+// Overridden by CI's compatibility matrix: -PpaperApiVersion=1.21.4-R0.1-SNAPSHOT
+val paperApiVersion: String by project
 
 java {
     toolchain {
@@ -13,7 +17,7 @@ java {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:${'$'}paperApiVersion")
     compileOnly("com.github.retrooper:packetevents-spigot:2.11.2")
     implementation("org.xerial:sqlite-jdbc:3.46.1.3")
 
@@ -47,6 +51,11 @@ tasks.shadowJar {
 
 tasks.named("build") {
     dependsOn(tasks.shadowJar)
+}
+
+// Advisory static analysis: never fails the build, run via `./gradlew spotbugsMain`.
+spotbugs {
+    ignoreFailures.set(true)
 }
 
 tasks.jar {

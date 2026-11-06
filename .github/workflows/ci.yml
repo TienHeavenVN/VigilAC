@@ -56,19 +56,186 @@ jobs:
               text = open(f, encoding='utf8', errors='replace').read()
               for m in re.finditer(r'<(failure|error)[^>]*message="([^"]*)"', text):
                   found += 1
-                  msg = html.unescape(m.group(2)).replace('\n', ' ').replace('\r', ' ')[:600]
+                  msg = html.unescape(m.group(2)).replace('\\n', ' ').replace('\\r', ' ')[:600]
                   case = os.path.basename(f)[:-4]
                   print(f'::error title={case}::{msg}')
           if not found:
               print('::error title=NoTestFailures::Test step failed but no failure tags were found in the XML reports')
           PYEOF
 
+      - name: Test summary (annotations)
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          import glob, re
+          total = failed = errors = skipped = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              head = open(f, encoding='utf8', errors='replace').read(400)
+              m = re.search(r'tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"', head)
+              if m:
+                  total += int(m.group(1)); skipped += int(m.group(2)); failed += int(m.group(3)); errors += int(m.group(4))
+          print(f'::notice title=TestSummary::tests={total} skipped={skipped} failures={failed} errors={errors}')
+          PYEOF
+
       - name: Build shadow JAR
         run: ./gradlew shadowJar --no-daemon --stacktrace
+
+      - name: Static analysis (SpotBugs, advisory)
+        if: always()
+        continue-on-error: true
+        run: ./gradlew spotbugsMain --no-daemon
+
+      - name: SHA-256 checksum
+        run: sha256sum build/libs/VigilAC.jar | tee build/libs/VigilAC.jar.sha256
 
       - name: Upload VigilAC.jar
         uses: actions/upload-artifact@v4
         with:
           name: VigilAC
-          path: build/libs/VigilAC.jar
+          path: |
+            build/libs/VigilAC.jar
+            build/libs/VigilAC.jar.sha256
           if-no-files-found: error
+
+  compat:
+    name: Compat ${{ matrix.paper }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        paper:
+          - '1.21'
+          - '1.21.1'
+          - '1.21.2'
+          - '1.21.3'
+          - '1.21.4'
+          - '1.21.5'
+          - '1.21.6'
+          - '1.21.7'
+          - '1.21.8'
+          - '1.21.9'
+          - '1.21.10'
+          - '1.21.11'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve paper-api (existence probe)
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/${{ matrix.paper }}-R0.1-SNAPSHOT/maven-metadata.xml")
+          echo "paper-api/${{ matrix.paper }}-R0.1-SNAPSHOT maven-metadata HTTP $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:${{ matrix.paper }}-R0.1-SNAPSHOT is not resolvable on repo.papermc.io (HTTP $CODE)"
+            exit 1
+          fi
+
+      - name: Compile against paper-api ${{ matrix.paper }}
+        run: ./gradlew compileJava --no-daemon --stacktrace -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT
+
+      - name: Unit tests against paper-api ${{ matrix.paper }}
+        run: ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT
+
+  integration:
+    name: Runtime smoke test (Paper 1.21.8)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build plugin
+        run: ./gradlew shadowJar --no-daemon -q
+
+      - name: Download Paper 1.21.8 (official API)
+        run: |
+          set -euo pipefail
+          mkdir -p server/plugins
+          BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.21.8 | python3 -c "import sys,json; print(json.load(sys.stdin)['builds'][-1])")
+          echo "Using Paper 1.21.8 build $BUILD"
+          curl -sL -o server/paper.jar "https://api.papermc.io/v2/projects/paper/versions/1.21.8/builds/${BUILD}/downloads/paper-1.21.8-${BUILD}.jar"
+          ls -la server/paper.jar
+
+      - name: Prepare server directory and properties
+        run: |
+          cp build/libs/VigilAC.jar server/plugins/
+          printf 'eula=true\n' > server/eula.txt
+          {
+            echo 'online-mode=false'
+            echo 'sync-chunk-writes=false'
+            echo 'enable-rcon=true'
+            echo 'rcon.password=vigilac-ci'
+            echo 'rcon.port=25575'
+            echo 'motd=VigilAC CI'
+            echo 'view-distance=4'
+            echo 'simulation-distance=4'
+            echo 'spawn-protection=0'
+            echo 'difficulty=normal'
+            echo 'gamemode=survival'
+          } > server/server.properties
+
+      - name: Start server and wait for the plugin to enable
+        run: |
+          cd server
+          nohup java -Xms512M -Xmx1G -jar paper.jar nogui > server.log 2>&1 &
+          echo $! > ../server.pid
+          for i in $(seq 1 120); do
+            if grep -q 'Done (' server.log; then echo "server ready after ~$((i * 2))s"; break; fi
+            if ! kill -0 "$(cat ../server.pid)" 2>/dev/null; then
+              echo "::error title=ServerDied::Paper process exited during boot"
+              tail -n 60 server.log || true
+              exit 1
+            fi
+            sleep 2
+          done
+          grep -q 'Done (' server.log || { echo "::error title=ServerTimeout::server did not report ready in 240s"; tail -n 60 server.log; exit 1; }
+          grep -q 'Enabling VigilAC' server.log || { echo "::error title=PluginNotEnabled::Enabling VigilAC not found in server.log"; exit 1; }
+
+      - name: RCON: plugins, vigilac info, vigilac violations
+        run: |
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci plugins > rcon-plugins.txt
+          cat rcon-plugins.txt
+          grep -qi vigilac rcon-plugins.txt || { echo "::error title=RconPlugins::VigilAC missing from /plugins output"; exit 1; }
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci vigilac info | tee rcon-info.txt
+          grep -qi 'VigilAC' rcon-info.txt || { echo "::error title=RconInfo::/vigilac info did not report VigilAC"; exit 1; }
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci vigilac violations > /dev/null
+
+      - name: Stop server and verify clean shutdown + SQLite file
+        run: |
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci stop || true
+          for i in $(seq 1 45); do
+            kill -0 "$(cat server.pid)" 2>/dev/null || break
+            sleep 2
+          done
+          echo '--- server.log tail ---'
+          tail -n 80 server/server.log
+          grep -q 'Disabling VigilAC' server/server.log || { echo "::error title=PluginNotDisabled::Disabling VigilAC not found in server.log"; exit 1; }
+          ls -la server/plugins/VigilAC/vigilac-violations.db || { echo "::error title=StorageMissing::vigilac-violations.db was not created"; exit 1; }
+          if grep -Ei 'exception|severe' server/server.log | grep -i vigilac; then
+            echo "::error title=PluginException::VigilAC logged an exception or severe during the run"
+            exit 1
+          fi
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-server-log
+          path: server/server.log
