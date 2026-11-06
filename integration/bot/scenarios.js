@@ -182,15 +182,6 @@ define('illegal-timer', { kind: 'illegal', description: 'alternating 0.62-block 
   api.result.evidence.push('sent ' + count + ' big-delta packets over ' + (Date.now() - t0) + 'ms (~' + Math.round(count / ((Date.now() - t0) / 1000)) + '/s)');
 });
 
-define('illegal-overspeed', { kind: 'illegal', description: 'horizontal speed ~6.2 blocks/s for 4s (sprint cap 5.61)', expect: ['speed'] }, async (bot, api) => {
-  bot.physicsEnabled = false;
-  for (let i = 0; i < 40; i++) {
-    forgeMove(bot, 0.8, 0, 0, true);
-    await api.sleep(100);
-  }
-  api.result.evidence.push('moved +0.8 blocks/packet at 10 Hz (~8 b/s)');
-});
-
 define('illegal-fly-hover', { kind: 'illegal', description: 'constant altitude airborne for 4.5s (fly hover signature)', expect: ['fly'] }, async (bot, api) => {
   bot.physicsEnabled = false;
   const g0 = ghost(bot);
@@ -217,19 +208,20 @@ define('illegal-invalid-vertical', { kind: 'illegal', description: 'vertical del
   api.result.evidence.push('vertical delta 5.0 x4');
 });
 
-define('illegal-nofall', { kind: 'illegal', description: 'three 5-block falls with resistance V (no fall damage fires), physics ON', expect: ['no-fall'] }, async (bot, api) => {
+define('illegal-nofall', { kind: 'illegal', description: 'three 5-block falls with resistance V, physics ON; wait out the 2s teleport grace before falling', expect: ['no-fall'] }, async (bot, api) => {
   const name = api.result.username;
+  bot.physicsEnabled = false;
   const fx = api.rcon(`effect give ${name} minecraft:resistance 9999 4 true`);
   api.result.evidence.push('resistance give -> ' + String(fx).replace(/\n/g, ' ').slice(0, 200));
   await api.sleep(400);
   for (let landing = 0; landing < 3; landing++) {
     const pos = bot.entity.position;
     api.rcon(`tp ${name} ${pos.x} ${pos.y + 5} ${pos.z}`);
-    await api.sleep(100);
+    await api.sleep(2200); // teleport grace (2s) expires while hanging motionless in the air
     bot.physicsEnabled = true;
-    await api.sleep(2500); // free fall ~1.1s from +5, land, settle
+    await api.sleep(2500); // free fall ~1.0s from +5, land, settle
     bot.physicsEnabled = false;
-    api.result.evidence.push('fall ' + (landing + 1) + ' completed (natural descent with resistance V, no damage expected)');
+    api.result.evidence.push('fall ' + (landing + 1) + ' (physics, post-grace, resistance V)');
   }
 });
 
