@@ -87,6 +87,10 @@ public final class VigilAC extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new AttackListener(this::getVigilacConfig, playerDataManager, checkManager, pipeline, exemptionManager), this);
         getServer().getPluginManager().registerEvents(
+                new BlockPlaceListener(this::getVigilacConfig, playerDataManager, checkManager, pipeline, exemptionManager), this);
+        getServer().getPluginManager().registerEvents(
+                new BlockBreakListener(this::getVigilacConfig, playerDataManager, checkManager, pipeline, exemptionManager), this);
+        getServer().getPluginManager().registerEvents(
                 new ConfounderListener(playerDataManager, this::getVigilacConfig), this);
 
         PacketEventsHook.tryRegister(this, playerDataManager);

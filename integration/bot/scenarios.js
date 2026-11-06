@@ -55,6 +55,22 @@ function attack(bot, entity) {
   bot._client.write('use_entity', { target: entity.id, mouse: 1, hand: 0 });
 }
 
+// 1.21.2+ validates attack cooldown AND look direction server-side: attacks
+// thrown while the crosshair is nowhere near the target deal no damage and
+// emit no EntityDamageByEntityEvent. Aim first, then hit.
+// MC pitch convention: positive = looking DOWN.
+async function lookAndAttack(bot, entity) {
+  const eye = bot.entity.position.y + 1.62;
+  const dx = entity.position.x - bot.entity.position.x;
+  const dz = entity.position.z - bot.entity.position.z;
+  const dist = Math.hypot(dx, dz);
+  const targetY = entity.position.y + (entity.height || 1.95) * 0.5;
+  const bearing = Math.atan2(-dx, dz);
+  const pitch = Math.atan2(eye - targetY, dist);
+  try { await bot.look(bearing, pitch, true); } catch (_) { /* physics disabled: best effort */ }
+  attack(bot, entity);
+}
+
 // ---------- legitimate scenarios (physics ON) ----------
 
 define('legit-stand', { kind: 'legit', description: 'stand still 5s', expect: [] }, async (bot, api) => {
@@ -190,23 +206,19 @@ define('illegal-invalid-vertical', { kind: 'illegal', description: 'vertical del
   api.result.evidence.push('vertical delta 5.0 x4');
 });
 
-define('illegal-nofall', { kind: 'illegal', description: 'three 4.5-block falls with resistance V (no damage event), no onGround claim until landing', expect: ['no-fall'] }, async (bot, api) => {
-  bot.physicsEnabled = false;
-  const fx = api.rcon(`effect give ${api.result.username} minecraft:resistance 9999 4 true`);
+define('illegal-nofall', { kind: 'illegal', description: 'three 5-block falls with resistance V (no fall damage fires), physics ON', expect: ['no-fall'] }, async (bot, api) => {
+  const name = api.result.username;
+  const fx = api.rcon(`effect give ${name} minecraft:resistance 9999 4 true`);
   api.result.evidence.push('resistance give -> ' + String(fx).replace(/\n/g, ' ').slice(0, 200));
+  await api.sleep(400);
   for (let landing = 0; landing < 3; landing++) {
-    const g = ghost(bot);
-    const tx = g.x, ty = g.y + 4.5, tz = g.z;
-    api.rcon(`tp ${api.result.username} ${tx} ${ty} ${tz}`);
-    setGhost(bot, tx, ty, tz);
-    await api.sleep(800);
-    for (let i = 0; i < 6; i++) {
-      forgeMove(bot, 0, -0.75, 0, false);
-      await api.sleep(60);
-    }
-    forgeMove(bot, 0, 0, 0, true); // claim landing exactly at start level
-    await api.sleep(600);
-    api.result.evidence.push('fall ' + (landing + 1) + ' completed with resistance V (no fall damage expected)');
+    const pos = bot.entity.position;
+    api.rcon(`tp ${name} ${pos.x} ${pos.y + 5} ${pos.z}`);
+    await api.sleep(100);
+    bot.physicsEnabled = true;
+    await api.sleep(2500); // free fall ~1.1s from +5, land, settle
+    bot.physicsEnabled = false;
+    api.result.evidence.push('fall ' + (landing + 1) + ' completed (natural descent with resistance V, no damage expected)');
   }
 });
 
@@ -222,7 +234,7 @@ define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tole
     zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
     const z = zombies[i];
     if (!z) { api.result.evidence.push('zombie#' + i + ' not tracked client-side'); continue; }
-    for (let j = 0; j < 10; j++) { attack(bot, z); await api.sleep(120); }
+    for (let j = 0; j < 10; j++) { await lookAndAttack(bot, z); await api.sleep(120); }
     const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
     api.result.evidence.push('zombie#' + i + ' (~' + [3.6, 4.5, 5.0][i] + 'b): hpBefore=[' + before.slice(-40) + '] hpAfter=[' + after.slice(-40) + ']');
   }
@@ -243,7 +255,7 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
       continue;
     }
     zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
-    attack(bot, zombies[0]);
+    await lookAndAttack(bot, zombies[0]);
     attacks++;
     await api.sleep(40);
   }
@@ -261,7 +273,7 @@ define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinc
   if (zombies.length < 3) { api.result.evidence.push('fewer than 3 zombies tracked: ' + zombies.length); return; }
   for (let round = 0; round < 3; round++) {
     for (const z of zombies) {
-      attack(bot, z);
+      await lookAndAttack(bot, z);
       await api.sleep(70);
     }
   }
@@ -358,7 +370,7 @@ define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree sna
     const dz = z.position.z - bot.entity.position.z;
     const dist = Math.hypot(dx, dz);
     const bearing = Math.atan2(-dx, dz);
-    const pitch = -Math.atan2(eye() - (z.position.y + 0.975), dist);
+    const pitch = Math.atan2(eye() - (z.position.y + 0.975), dist);
     await bot.look(bearing + Math.PI, 0, true);
     await api.sleep(30);
     await bot.look(bearing, pitch, true);
