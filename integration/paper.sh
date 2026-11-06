@@ -47,7 +47,7 @@ printf 'eula=true\n' > eula.txt
   echo 'spawn-protection=0'
   echo 'difficulty=normal'
   echo 'gamemode=survival'
-  echo 'spawn-monsters=true'
+  echo 'spawn-monsters=false'
   echo 'allow-flight=true'
   echo 'max-tick-time=120000'
 } > server.properties

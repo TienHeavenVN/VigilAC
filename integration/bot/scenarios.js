@@ -44,7 +44,7 @@ function setAirborne(bot) {
 
 /** Summon a zombie relative to the bot; returns the live zombie entity or null. */
 async function summonZombieNear(bot, api, offset, name) {
-  api.rcon(`execute at ${name} run summon minecraft:zombie ~${offset.x} ~ ~${offset.z} {NoAI:1b}`);
+  api.rcon(`execute at ${name} run summon minecraft:zombie ~${offset.x} ~ ~${offset.z} {NoAI:1b,Tags:["livetest"]}`);
   await api.sleep(1200);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
   zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
@@ -228,24 +228,24 @@ define('illegal-nofall', { kind: 'probe', description: 'fall-damage cancellation
 define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tolerance: zombie HP verified before/after', expect: ['reach'] }, async (bot, api) => {
   const name = api.result.username;
   for (const dist of [3.6, 4.5, 5.0]) {
-    api.rcon(`execute at ${name} run summon minecraft:zombie ~${dist} ~ ~ {NoAI:1b}`);
+    api.rcon(`execute at ${name} run summon minecraft:zombie ~${dist} ~ ~ {NoAI:1b,Tags:["livetest"]}`);
       }
   await api.sleep(1000);
   for (let i = 0; i < 3; i++) {
-    const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+    const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,tag=livetest,sort=nearest,limit=1] Health`);
     const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
     zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
     const z = zombies[i];
     if (!z) { api.result.evidence.push('zombie#' + i + ' not tracked client-side'); continue; }
     for (let j = 0; j < 10; j++) { await lookAndAttack(bot, z); await api.sleep(120); }
-    const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+    const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,tag=livetest,sort=nearest,limit=1] Health`);
     api.result.evidence.push('zombie#' + i + ' (~' + [3.6, 4.5, 5.0][i] + 'b): hpBefore=[' + before.slice(-40) + '] hpAfter=[' + after.slice(-40) + ']');
   }
 });
 
 define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS on a single victim, re-summoning only after it dies (kill-aura isolated)', expect: ['auto-clicker'] }, async (bot, api) => {
   const name = api.result.username;
-  api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ {NoAI:1b}`);
+  api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ {NoAI:1b,Tags:["livetest"]}`);
   await api.sleep(400);
     await api.sleep(400);
   const end = Date.now() + 12000;
@@ -253,7 +253,7 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
   while (Date.now() < end) {
     const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
     if (zombies.length === 0) {
-      api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ {NoAI:1b}`);
+      api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ {NoAI:1b,Tags:["livetest"]}`);
       resummons++;
       await api.sleep(600);
       continue;
@@ -269,10 +269,10 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
 define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinct zombies inside 1s window (HP verified)', expect: ['kill-aura'] }, async (bot, api) => {
   const name = api.result.username;
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }, { x: 0, z: 2 }, { x: 0, z: -2 }]) {
-    api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z} {NoAI:1b}`);
+    api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z} {NoAI:1b,Tags:["livetest"]}`);
   }
     await api.sleep(1500);
-  const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+  const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,tag=livetest,sort=nearest,limit=1] Health`);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 4);
   if (zombies.length < 3) { api.result.evidence.push('fewer than 3 zombies tracked: ' + zombies.length); return; }
   for (let round = 0; round < 3; round++) {
@@ -281,7 +281,7 @@ define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinc
       await api.sleep(70);
     }
   }
-  const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+  const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,tag=livetest,sort=nearest,limit=1] Health`);
   api.result.evidence.push('zombie HP before=[' + before.slice(-120) + '] after=[' + after.slice(-120) + ']');
 });
 
@@ -362,7 +362,7 @@ define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20m
 
 define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree snaps landing on targets', expect: ['aim-assist'] }, async (bot, api) => {
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }]) {
-    api.rcon(`execute at ${api.result.username} run summon minecraft:zombie ~${off.x} ~ ~${off.z} {NoAI:1b}`);
+    api.rcon(`execute at ${api.result.username} run summon minecraft:zombie ~${off.x} ~ ~${off.z} {NoAI:1b,Tags:["livetest"]}`);
   }
     await api.sleep(1500);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 2);
@@ -382,7 +382,7 @@ define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree sna
     attack(bot, z);
     await api.sleep(20);
   }
-  const hp = api.rcon(`execute at ${api.result.username} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+  const hp = api.rcon(`execute at ${api.result.username} run data get entity @e[type=zombie,tag=livetest,sort=nearest,limit=1] Health`);
   api.result.evidence.push('6 alternating 180-degree snaps onto zombies; zombie HP=[' + hp.slice(-80) + ']');
 });
 
