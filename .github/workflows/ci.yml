@@ -283,7 +283,7 @@ jobs:
           if ! grep -qi 'VigilAC' rcon-info.txt; then echo '::error title=RconInfo::VigilAC not present in /vigilac info output'; exit 1; fi
           echo '::notice title=RconStep::all RCON probes passed'
 
-      - name: Server log: first ERROR block (diagnostic)
+      - name: "Server log: first ERROR block (diagnostic)"
         if: always()
         run: |
           python3 - <<'PYEOF'
