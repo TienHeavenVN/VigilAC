@@ -205,31 +205,35 @@ jobs:
 
       - name: Download Paper 1.21.8 (official API, SHA-256 verified)
         run: |
-          set -euo pipefail
+          set -uo pipefail
           API="https://api.papermc.io/v2/projects/paper"
           mkdir -p server/plugins
-          echo "== GET $API/versions/1.21.8/builds =="
-          curl -sS -w 'HTTP %{http_code}\n' "$API/versions/1.21.8/builds" -o builds.json
-          head -c 300 builds.json; echo
-          BUILD=$(jq -r '.builds[-1] // ""' builds.json)
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o builds.json "$API/versions/1.21.8/builds") || CODE="curl-failed"
+          echo "builds endpoint HTTP $CODE"
+          head -c 400 builds.json 2>/dev/null; echo
+          BUILD=$(jq -r 'if type == "object" then (.builds[-1] // "") else "" end' builds.json 2>/dev/null)
           if [ -z "$BUILD" ]; then
-            echo "::error title=PaperMeta::could not list builds for 1.21.8 from api.papermc.io"
+            BODY=$(head -c 300 builds.json 2>/dev/null | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+            echo "::error title=PaperMeta::HTTP $CODE body: $BODY"
             exit 1
           fi
           echo "Latest Paper 1.21.8 build: $BUILD"
-          curl -sS -w 'HTTP %{http_code}\n' "$API/versions/1.21.8/builds/$BUILD" -o build.json
-          head -c 500 build.json; echo
-          NAME=$(jq -r '.downloads.application.name // ""' build.json)
-          SHA=$(jq -r '.downloads.application.sha256 // ""' build.json)
+          CODE2=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o build.json "$API/versions/1.21.8/builds/$BUILD") || CODE2="curl-failed"
+          echo "build endpoint HTTP $CODE2"
+          head -c 500 build.json 2>/dev/null; echo
+          NAME=$(jq -r '.downloads.application.name // ""' build.json 2>/dev/null)
+          SHA=$(jq -r '.downloads.application.sha256 // ""' build.json 2>/dev/null)
           if [ -z "$NAME" ] || [ -z "$SHA" ]; then
-            echo "::error title=PaperMeta::build metadata lacks downloads.application.{name,sha256}"
+            BODY2=$(head -c 300 build.json 2>/dev/null | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+            echo "::error title=PaperBuildMeta::HTTP $CODE2 name='$NAME' sha='$SHA' body: $BODY2"
             exit 1
           fi
           URL="$API/versions/1.21.8/builds/$BUILD/downloads/$NAME"
           echo "GET $URL"
-          curl -sSL -w 'HTTP %{http_code}\n' -o server/paper.jar "$URL"
+          CODE3=$(curl -sSL --retry 2 --retry-delay 2 -w '%{http_code}' -o server/paper.jar "$URL") || CODE3="curl-failed"
+          echo "download HTTP $CODE3"
           ls -la server/paper.jar
-          echo "$SHA  server/paper.jar" | sha256sum -c - || { echo "::error title=PaperJar::SHA-256 mismatch for the Paper download"; exit 1; }
+          echo "$SHA  server/paper.jar" | sha256sum -c - || { echo "::error title=PaperJar::SHA-256 mismatch for the Paper download (HTTP $CODE3)"; exit 1; }
 
       - name: Prepare server directory and properties
         run: |
