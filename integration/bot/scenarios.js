@@ -1,13 +1,3 @@
-define('illegal-overspeed', { kind: 'illegal', description: '6.4 b/s horizontal walk (above 4.4 walk cap, under Paper revert threshold)', expect: ['speed'] }, async (bot, api) => {
-  bot.physicsEnabled = false;
-  const end = Date.now() + 10000;
-  while (Date.now() < end) {
-    forgeMove(bot, 0.32, 0, 0, true);
-    await api.sleep(50);
-  }
-  api.result.evidence.push('moved +0.32 blocks/packet at 20 Hz (~6.4 b/s) for 10s');
-});
-
 /**
  * Scenario definitions for the VigilAC live test harness.
  *
@@ -166,6 +156,17 @@ define('legit-teleport', { kind: 'legit', description: 'server-side upward tp (g
 });
 
 // ---------- illegal scenarios (physics OFF, forged packets) ----------
+
+define('illegal-overspeed', { kind: 'illegal', description: '6.4 b/s horizontal walk (above 4.4 walk cap, under Paper revert threshold)', expect: ['speed'] }, async (bot, api) => {
+  bot.physicsEnabled = false;
+  const end = Date.now() + 10000;
+  while (Date.now() < end) {
+    forgeMove(bot, 0.32, 0, 0, true);
+    await api.sleep(50);
+  }
+  api.result.evidence.push('moved +0.32 blocks/packet at 20 Hz (~6.4 b/s) for 10s');
+});
+
 
 define('illegal-timer', { kind: 'illegal', description: 'alternating 0.62-block deltas at ~25/s for 6s (proven to produce timer evidence)', expect: ['timer'] }, async (bot, api) => {
   bot.physicsEnabled = false;
