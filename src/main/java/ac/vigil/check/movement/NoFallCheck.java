@@ -74,12 +74,12 @@ public final class NoFallCheck implements Check<DetectionContext> {
                 || ctx.isLevitation() || ctx.isSlowFalling() || ctx.isOnSlipperyBlock()
                 || ctx.getServerTps() < MIN_TPS;
         if (exempt) {
-            if (!ctx.isOnGround()) {
-                tracker.enterAirborne(ctx.getTimestamp());
-                tracker.accumulateAirborne(ctx.getDeltaY());
-            } else {
-                tracker.leaveAirborne();
-            }
+            // Modifier active: whatever the fall distance, no evidence can
+            // exist for this airborne period. Clearing the accumulator (not
+            // just pausing it) prevents a landing after Slow Falling/Levitation
+            // from being judged against a distance the player never fell
+            // through under their own momentum.
+            tracker.leaveAirborne();
             return;
         }
 
