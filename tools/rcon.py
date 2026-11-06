@@ -59,8 +59,14 @@ def main() -> int:
             return 3
 
         send_packet(sock, 2, REQUEST_COMMAND, command)
-        # Sentinel packet: everything before its response belongs to the command.
-        send_packet(sock, 3, REQUEST_RESPONSE, "")
+        # Sentinel packet: a *command* (same packet type as a command) with an
+        # empty payload. The server responds to it normally, which delimits the
+        # command's response. (A SERVERDATA_RESPONSE_VALUE-typed sentinel was
+        # previously used here; Paper's RCON loop treats unknown client packet
+        # types unpredictably - in the worst case the connection dies before the
+        # real command is processed. That race made the CI pad build silently
+        # fail. The command type is safe.)
+        send_packet(sock, 3, REQUEST_COMMAND, "")
         chunks = []
         while True:
             request_id, packet_type, payload = read_packet(sock)
