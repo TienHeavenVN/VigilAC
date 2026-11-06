@@ -207,10 +207,29 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p server/plugins
-          BUILD=$(curl -s https://api.papermc.io/v2/projects/paper/versions/1.21.8 | python3 -c "import sys,json; print(json.load(sys.stdin)['builds'][-1])")
+          echo '== GET version metadata =='
+          curl -sS -w '
+HTTP %{http_code}
+' "https://api.papermc.io/v2/projects/paper/versions/1.21.8" -o meta.json
+          cat meta.json
+          BUILD=$(jq -r '.builds[-1] // ""' meta.json)
+          if [ -z "$BUILD" ]; then
+            echo "::error title=PaperMeta::could not parse build list for 1.21.8 from api.papermc.io"
+            exit 1
+          fi
           echo "Using Paper 1.21.8 build $BUILD"
-          curl -sL -o server/paper.jar "https://api.papermc.io/v2/projects/paper/versions/1.21.8/builds/${BUILD}/downloads/paper-1.21.8-${BUILD}.jar"
+          URL="https://api.papermc.io/v2/projects/paper/versions/1.21.8/builds/${BUILD}/downloads/paper-1.21.8-${BUILD}.jar"
+          echo "GET $URL"
+          curl -sSL -w '
+HTTP %{http_code}
+' -o server/paper.jar "$URL"
           ls -la server/paper.jar
+          SIZE=$(stat -c%s server/paper.jar)
+          echo "downloaded $SIZE bytes"
+          if [ "$SIZE" -lt 10000000 ]; then
+            echo "::error title=PaperJar::downloaded jar is suspiciously small ($SIZE bytes)"
+            exit 1
+          fi
 
       - name: Prepare server directory and properties
         run: |
