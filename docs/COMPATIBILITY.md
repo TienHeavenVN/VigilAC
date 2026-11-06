@@ -29,7 +29,7 @@ treat runtime behavior on these versions as validated.
 
 ## Runtime validation
 
-The `integration` job in CI downloads the official Paper 1.21.8 build from `api.papermc.io`,
+The `integration` job in CI downloads the official Paper 1.21.8 build from `fill.papermc.io` (Fill v3 API),
 boots a headless server in CI (offline mode, RCON enabled), loads VigilAC, and verifies:
 
 - `Enabling VigilAC` and `Disabling VigilAC` both appear in `server.log`,

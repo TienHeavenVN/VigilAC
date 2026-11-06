@@ -119,7 +119,7 @@ verdict escalation, decay), the config validator, the SQLite storage layer (roun
 file) and the packaging contract of `config.yml`/`plugin.yml`.
 
 CI also runs a **runtime smoke test**: it downloads the official Paper 1.21.8 build from
-`api.papermc.io`, boots a headless server with VigilAC installed, drives `/plugins` and
+`fill.papermc.io` (Fill v3 API), boots a headless server with VigilAC installed, drives `/plugins` and
 `/vigilac info` over RCON, and verifies clean enable/disable and the SQLite audit file — see
 `.github/workflows/ci.yml`.
 

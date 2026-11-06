@@ -203,37 +203,30 @@ jobs:
       - name: Build plugin
         run: ./gradlew shadowJar --no-daemon -q
 
-      - name: Download Paper 1.21.8 (official API, SHA-256 verified)
+      - name: Download Paper 1.21.8 (Fill v3 API, SHA-256 verified)
         run: |
           set -uo pipefail
-          API="https://api.papermc.io/v2/projects/paper"
+          API="https://fill.papermc.io/v3/projects/paper"
+          UA="VigilAC-CI/1.0.0 (github.com/TienHeavenVN/VigilAC)"
           mkdir -p server/plugins
-          CODE=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o builds.json "$API/versions/1.21.8/builds") || CODE="curl-failed"
-          echo "builds endpoint HTTP $CODE"
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o builds.json "$API/versions/1.21.8/builds") || CODE="curl-failed"
+          echo "Fill v3 builds endpoint HTTP $CODE"
           head -c 400 builds.json 2>/dev/null; echo
-          BUILD=$(jq -r 'if type == "object" then (.builds[-1] // "") else "" end' builds.json 2>/dev/null)
-          if [ -z "$BUILD" ]; then
+          BUILDID=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].id // "")' builds.json 2>/dev/null)
+          NAME=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].name // "")' builds.json 2>/dev/null)
+          URL=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].url // "")' builds.json 2>/dev/null)
+          SHA=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].checksums.sha256 // "")' builds.json 2>/dev/null)
+          if [ -z "$BUILDID" ] || [ -z "$URL" ] || [ -z "$SHA" ]; then
             BODY=$(head -c 300 builds.json 2>/dev/null | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
-            echo "::error title=PaperMeta::HTTP $CODE body: $BODY"
+            echo "::error title=PaperMeta::HTTP $CODE id='$BUILDID' name='$NAME' body: $BODY"
             exit 1
           fi
-          echo "Latest Paper 1.21.8 build: $BUILD"
-          CODE2=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o build.json "$API/versions/1.21.8/builds/$BUILD") || CODE2="curl-failed"
-          echo "build endpoint HTTP $CODE2"
-          head -c 500 build.json 2>/dev/null; echo
-          NAME=$(jq -r '.downloads.application.name // ""' build.json 2>/dev/null)
-          SHA=$(jq -r '.downloads.application.sha256 // ""' build.json 2>/dev/null)
-          if [ -z "$NAME" ] || [ -z "$SHA" ]; then
-            BODY2=$(head -c 300 build.json 2>/dev/null | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
-            echo "::error title=PaperBuildMeta::HTTP $CODE2 name='$NAME' sha='$SHA' body: $BODY2"
-            exit 1
-          fi
-          URL="$API/versions/1.21.8/builds/$BUILD/downloads/$NAME"
-          echo "GET $URL"
-          CODE3=$(curl -sSL --retry 2 --retry-delay 2 -w '%{http_code}' -o server/paper.jar "$URL") || CODE3="curl-failed"
-          echo "download HTTP $CODE3"
+          echo "Latest Paper 1.21.8 STABLE build: $BUILDID ($NAME)"
+          echo "URL: $URL"
+          CODE2=$(curl -sSL --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o server/paper.jar "$URL") || CODE2="curl-failed"
+          echo "download HTTP $CODE2"
           ls -la server/paper.jar
-          echo "$SHA  server/paper.jar" | sha256sum -c - || { echo "::error title=PaperJar::SHA-256 mismatch for the Paper download (HTTP $CODE3)"; exit 1; }
+          echo "$SHA  server/paper.jar" | sha256sum -c - || { echo "::error title=PaperJar::SHA-256 mismatch for the Paper download (HTTP $CODE2)"; exit 1; }
 
       - name: Prepare server directory and properties
         run: |
