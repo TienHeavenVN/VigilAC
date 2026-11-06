@@ -35,6 +35,11 @@ echo "== building deterministic test pad =="
 FL=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "forceload add -24 -24 24 24")
 echo "forceload -> $FL"
 case "$FL" in *forceload*|*loaded*) ;; *) echo "::error title=PadForceload::forceload did not succeed: '$FL'"; exit 1;; esac
+# Natural spawns must not attack the deterministic pad; /summon still works
+# under this gamerule, unlike spawn-monsters=false which also suppresses them.
+GM=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "gamerule doMobSpawning false")
+echo "gamerule -> $GM"
+case "$GM" in *doMobSpawning*false*) ;; *) echo "::error title=MobSpawning::gamerule doMobSpawning false did not succeed: '$GM'"; exit 1;; esac
 PAD_STONE=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "fill -24 63 -24 24 63 24 minecraft:stone")
 echo "pad stone fill -> $PAD_STONE"
 PAD_AIR=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "fill -24 64 -24 24 76 24 minecraft:air")
