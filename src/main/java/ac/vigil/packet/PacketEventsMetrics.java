@@ -54,8 +54,13 @@ final class PacketEventsMetrics {
                     return;
                 }
                 var data = dataManager.get(uuid);
-                if (data != null) {
-                    data.notePacket();
+                if (data == null) {
+                    return;
+                }
+                data.notePacket();
+                String typeName = String.valueOf(event.getPacketType());
+                if (isMovementType(typeName)) {
+                    data.movementTracker().noteRawMovePacket(System.currentTimeMillis());
                 }
             } catch (Throwable throwable) {
                 if (!warned) {
@@ -63,6 +68,12 @@ final class PacketEventsMetrics {
                     logger.warning("packetevents metrics failed once (further failures suppressed): " + throwable);
                 }
             }
+        }
+
+        /** Broad, version-tolerant match for the four client movement packet types. */
+        private static boolean isMovementType(String typeName) {
+            String upper = typeName.toUpperCase(java.util.Locale.ROOT);
+            return upper.contains("POSITION") || upper.contains("ROTATION") || upper.contains("FLYING");
         }
 
         @Override

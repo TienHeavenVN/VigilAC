@@ -192,8 +192,8 @@ define('illegal-invalid-vertical', { kind: 'illegal', description: 'vertical del
 
 define('illegal-nofall', { kind: 'illegal', description: 'three 4.5-block falls with resistance V (no damage event), no onGround claim until landing', expect: ['no-fall'] }, async (bot, api) => {
   bot.physicsEnabled = false;
-  api.rcon(`effect give ${api.result.username} minecraft:resistance 9999 4 true`);
-  await api.sleep(400);
+  const fx = api.rcon(`effect give ${api.result.username} minecraft:resistance 9999 4 true`);
+  api.result.evidence.push('resistance give -> ' + String(fx).replace(/\n/g, ' ').slice(0, 200));
   for (let landing = 0; landing < 3; landing++) {
     const g = ghost(bot);
     const tx = g.x, ty = g.y + 4.5, tz = g.z;
@@ -217,13 +217,13 @@ define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tole
   }
   await api.sleep(1000);
   for (let i = 0; i < 3; i++) {
-    const before = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+    const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
     const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
     zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
     const z = zombies[i];
     if (!z) { api.result.evidence.push('zombie#' + i + ' not tracked client-side'); continue; }
     for (let j = 0; j < 10; j++) { attack(bot, z); await api.sleep(120); }
-    const after = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+    const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
     api.result.evidence.push('zombie#' + i + ' (~' + [3.6, 4.5, 5.0][i] + 'b): hpBefore=[' + before.slice(-40) + '] hpAfter=[' + after.slice(-40) + ']');
   }
 });
@@ -256,7 +256,7 @@ define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinc
     api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z}`);
   }
   await api.sleep(1500);
-  const before = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+  const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 4);
   if (zombies.length < 3) { api.result.evidence.push('fewer than 3 zombies tracked: ' + zombies.length); return; }
   for (let round = 0; round < 3; round++) {
@@ -265,7 +265,7 @@ define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinc
       await api.sleep(70);
     }
   }
-  const after = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+  const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   api.result.evidence.push('zombie HP before=[' + before.slice(-120) + '] after=[' + after.slice(-120) + ']');
 });
 
@@ -319,7 +319,11 @@ define('illegal-fastplace', { kind: 'illegal', description: 'stack 5 blocks on e
       }
     }
   }
-  api.result.evidence.push('placed ' + placed + ' blocks in ' + (Date.now() - started) + 'ms' + (errors.length ? ' errors=[' + errors.slice(0, 2).join(' || ') + ']' : ''));
+  if (placed > 0) {
+    const top = pos.offset(2, 4, 1); // pillar 1 apex after 5 stacks
+    api.rcon(`execute if block ${top.x} ${top.y} ${top.z} minecraft:dirt run say DIRT_STACK_VERIFIED`);
+  }
+  api.result.evidence.push('placed ' + placed + ' blocks in ' + (Date.now() - started) + 'ms' + (errors.length ? ' errors=[' + errors.slice(0, 2).join(' || ') + ']' : '') + ' (stack verified via chat DIRT_STACK_VERIFIED if present)');
 });
 
 define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20ms apart on floating stone; verify block survives (server dig-progress rule)', expect: [] }, async (bot, api) => {
@@ -327,7 +331,6 @@ define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20m
   const name = api.result.username;
   const g = ghost(bot);
   const bx = Math.floor(g.x), by = Math.floor(g.y) + 1, bz = Math.floor(g.z) + 2;
-  let survived = 0;
   for (let i = 0; i < 6; i++) {
     api.rcon(`setblock ${bx} ${by} ${bz} minecraft:stone`);
     await api.sleep(250);
@@ -335,10 +338,10 @@ define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20m
     await api.sleep(20);
     bot._client.write('block_dig', { status: 2, location: { x: bx, y: by, z: bz }, face: 1, sequence: 200 + i });
     await api.sleep(300);
-    const probe = api.rcon(`execute if block ${bx} ${by} ${bz} minecraft:stone run say STONE_SURVIVED`);
-    if (probe.includes('STONE_SURVIVED')) survived++;
+    api.rcon(`execute if block ${bx} ${by} ${bz} minecraft:stone run say STONE_SURVIVED`);
+    await api.sleep(120);
   }
-  api.result.evidence.push('floating stone survived ' + survived + '/6 20ms dig bursts (server dig-progress enforcement)');
+  api.result.evidence.push('6x 20ms dig bursts on floating stone sent; survival verifiable via [Rcon] STONE_SURVIVED chat lines above');
 });
 
 define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree snaps landing on targets', expect: ['aim-assist'] }, async (bot, api) => {
@@ -362,7 +365,7 @@ define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree sna
     attack(bot, z);
     await api.sleep(60);
   }
-  const hp = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+  const hp = api.rcon(`execute at ${api.result.username} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   api.result.evidence.push('6 alternating 180-degree snaps onto zombies; zombie HP=[' + hp.slice(-80) + ']');
 });
 

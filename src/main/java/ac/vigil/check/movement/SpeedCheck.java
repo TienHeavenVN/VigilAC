@@ -98,6 +98,15 @@ public final class SpeedCheck implements Check<DetectionContext> {
             data.resetExcessTime();
             return;
         }
+        if (dtMillis < 45.0D) {
+            // Backlog burst: the server drained several queued packets inside one
+            // tick interval. Wall-clock dt under-represents real travel time and
+            // the sample would fabricate an impossible instantaneous speed
+            // (observed: a 563 ms-ping client producing EMA=11.0 on a legitimate
+            // sprint-jump). Skip the sample: the EMA and the excess-time window
+            // stay anchored to samples the server actually had time to move.
+            return;
+        }
         double seconds = dtMillis / 1_000.0D;
 
         double instantSpeed = ctx.getHorizontalDistance() / seconds;

@@ -55,9 +55,12 @@ public final class PlayerMoveListener implements Listener {
         double dx = to.getX() - from.getX();
         double dy = to.getY() - from.getY();
         double dz = to.getZ() - from.getZ();
-        if (dx == 0.0D && dy == 0.0D && dz == 0.0D) {
-            return; // rotation-only event: no detection work
-        }
+        // A zero-delta packet claims no motion; it still carries the grounded
+        // bit. Vanilla players land with an onGround=true, zero-motion packet,
+        // so returning here unconditionally would discard the only no-fall
+        // evidence (the landing) entirely. The downstream checks are all
+        // delta-relative and behave correctly on zero deltas, and the packet
+        // counts toward the timer rate.
 
         org.bukkit.entity.Player player = event.getPlayer();
         VigilACConfig cfg = config.get();
@@ -67,7 +70,11 @@ public final class PlayerMoveListener implements Listener {
         // ones; counted before any early return so the ring is never biased.
         long nowPacket = System.currentTimeMillis();
         data.movementTracker().noteMovePacket(nowPacket);
-        double movePacketsPerSecond = data.movementTracker().movePacketsPerSecond(nowPacket);
+        // Bukkit coalesces position events to at most ~20/s on Paper; the optional
+        // packetevents integration records the true pre-coalescing packet rate.
+        double movePacketsPerSecond = Math.max(
+                data.movementTracker().movePacketsPerSecond(nowPacket),
+                data.movementTracker().rawMovePacketsPerSecond(nowPacket));
 
         if (player.hasPermission(cfg.exemptPermission())) {
             return;

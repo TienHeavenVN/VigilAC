@@ -10,8 +10,11 @@ package ac.vigil.data.tracking;
  * <ul>
  *   <li>Airborne bookkeeping (fly/hover evidence, fall-distance estimation)
  *       using the move-event stream only — no packets required.</li>
- *   <li>Movement-packet rate sampling for the timer check (counts every
- *       {@code PlayerMoveEvent}, including rotation-only ones).</li>
+ *   <li>Movement-packet rate sampling for the timer check. Two sources are
+ *       tracked: the Bukkit move-event stream (always available, coalesced by
+ *       the server to at most ~20/s on Paper) and a raw client-packet ring
+ *       fed by the optional packetevents integration (true packet rate,
+ *       pre-coalescing). The listener uses the maximum of both.</li>
  * </ul>
  */
 public final class MovementTracker {
@@ -30,6 +33,11 @@ public final class MovementTracker {
     private final long[] moveRing = new long[MOVE_RING_SIZE];
     private int moveRingIndex;
     private int moveRingCount;
+
+    /** Raw position/rotation packet timestamps from packetevents (any thread). */
+    private final long[] rawRing = new long[MOVE_RING_SIZE];
+    private int rawRingIndex;
+    private int rawRingCount;
 
     /** Marks the player as airborne; no-op if already airborne. */
     public synchronized void enterAirborne(long now) {
@@ -128,20 +136,38 @@ public final class MovementTracker {
 
     /** Number of movement packets recorded in the trailing 1000 ms before {@code now}. */
     public synchronized double movePacketsPerSecond(long now) {
+        return trailingRate(moveRing, moveRingIndex, moveRingCount, now);
+    }
+
+    /** Records one raw client movement packet (position/rotation) at {@code now}; safe from any thread. */
+    public synchronized void noteRawMovePacket(long now) {
+        rawRing[rawRingIndex] = now;
+        rawRingIndex = (rawRingIndex + 1) % MOVE_RING_SIZE;
+        if (rawRingCount < MOVE_RING_SIZE) {
+            rawRingCount++;
+        }
+    }
+
+    /** Number of raw client movement packets in the trailing 1000 ms before {@code now}. */
+    public synchronized double rawMovePacketsPerSecond(long now) {
+        return trailingRate(rawRing, rawRingIndex, rawRingCount, now);
+    }
+
+    private static double trailingRate(long[] ring, int index, int count, long now) {
         long cutoff = now - 1_000L;
-        int count = 0;
-        int idx = moveRingIndex - 1;
-        for (int i = 0; i < moveRingCount; i++) {
+        int found = 0;
+        int idx = index - 1;
+        for (int i = 0; i < count; i++) {
             int slot = idx - i;
             if (slot < 0) {
                 slot += MOVE_RING_SIZE;
             }
-            long ts = moveRing[slot];
+            long ts = ring[slot];
             if (ts < cutoff) {
                 break; // ring is chronological
             }
-            count++;
+            found++;
         }
-        return count;
+        return found;
     }
 }
