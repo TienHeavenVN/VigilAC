@@ -380,10 +380,11 @@ define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree sna
     const bearing = Math.atan2(-dx, dz);
     const pitch = Math.atan2(eye() - (z.position.y + 0.975), dist);
     await bot.look(bearing + Math.PI, 0, true);
-    await api.sleep(30);
+    // snap-max-interval is 120ms server-side: run look-snap and attack back to
+    // back so consecutive attacks land inside one snap window (zombies frozen).
     await bot.look(bearing, pitch, true);
     attack(bot, z);
-    await api.sleep(60);
+    await api.sleep(20);
   }
   const hp = api.rcon(`execute at ${api.result.username} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   api.result.evidence.push('6 alternating 180-degree snaps onto zombies; zombie HP=[' + hp.slice(-80) + ']');
