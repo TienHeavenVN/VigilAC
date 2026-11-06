@@ -22,6 +22,16 @@ const baseScenario = scenarioId.replace(/-lat$/, '');
 const base = scenarios[baseScenario];
 const scenario = base ? { ...base, description: base.description + (baseScenario !== scenarioId ? ' (120ms±30ms latency)' : '') } : undefined;
 
+const RCON_PY = process.env.RCON_PY || path.join(__dirname, '..', '..', 'tools', 'rcon.py');
+const RCON_PORT = process.env.RCON_PORT || '25575';
+const RCON_PASSWORD = process.env.RCON_PASSWORD || 'vigilac-ci';
+const rcon = (command) => {
+  const r = spawnSync('python3', [RCON_PY, '127.0.0.1', RCON_PORT, RCON_PASSWORD, command], {
+    encoding: 'utf8', timeout: 15000,
+  });
+  return ((r.stdout || '') + (r.stderr || '')).trim();
+};
+
 /** Staff observer: op'd idle bot that captures every [VigilAC debug] chat line. */
 if (scenarioId === '__staff__') {
   const bot = mineflayer.createBot({
@@ -44,15 +54,6 @@ if (!scenario && scenarioId !== '__staff__') {
   process.exit(2);
 }
 
-const RCON_PY = process.env.RCON_PY || path.join(__dirname, '..', '..', 'tools', 'rcon.py');
-const RCON_PORT = process.env.RCON_PORT || '25575';
-const RCON_PASSWORD = process.env.RCON_PASSWORD || 'vigilac-ci';
-const rcon = (command) => {
-  const r = spawnSync('python3', [RCON_PY, '127.0.0.1', RCON_PORT, RCON_PASSWORD, command], {
-    encoding: 'utf8', timeout: 15000,
-  });
-  return ((r.stdout || '') + (r.stderr || '')).trim();
-};
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
