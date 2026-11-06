@@ -11,7 +11,6 @@ RESULTS="${2:-$ROOT/integration/out}"
 PORT=25567
 SRV="$ROOT/integration/server"
 PACKETEVENTS="${PACKETEVENTS:-0}"
-SCENARIOS=$(node -e "console.log(Object.keys(require('$ROOT/integration/bot/scenarios.js').scenarios).join(' '))")
 
 rm -rf "$SRV" "$RESULTS"
 mkdir -p "$RESULTS"
@@ -34,6 +33,12 @@ grep -q 'Done (' server.log || { echo '::error title=ServerTimeout::no Done in 2
 grep -q 'VigilAC enabled:' server.log || { echo '::error title=PluginNotEnabled::success marker missing'; exit 1; }
 echo "server up; installing node deps"
 (cd "$ROOT/integration/bot" && npm ci --no-audit --no-fund -q) || { echo '::error title=NpmCi::bot deps failed'; exit 1; }
+SCENARIOS=$(node -e "console.log(Object.keys(require('$ROOT/integration/bot/scenarios.js').scenarios).join(' '))")
+if [ -z "$SCENARIOS" ]; then
+  echo '::error title=Harness::could not enumerate scenarios from scenarios.js'
+  exit 1
+fi
+echo "scenarios: $SCENARIOS"
 
 echo "== running scenarios =="
 pass=0; fail=0; unable=0
