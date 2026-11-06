@@ -19,7 +19,7 @@ full unit-test suite** on every push (`.github/workflows/ci.yml`, job `compat`):
 | 1.21.5 | ✓ | n/t | |
 | 1.21.6 | ✓ | n/t | |
 | 1.21.7 | ✓ | n/t | |
-| 1.21.8 | ✓ | ✓ (see below) | Primary target; CI also boots a real Paper 1.21.8 server with the plugin installed |
+| 1.21.8 | ✓ | ✓ **PASSED** (2026-11-06, CI run 42216394282, latest stable Fill v3 build; plugin enabled cleanly, `/plugins` showed VigilAC (green), `/vigilac info` reported all 12 checks + storage enabled, zero ERROR lines, clean disable, SQLite audit file created) | Primary target; CI boots a real Paper 1.21.8 server with the plugin installed |
 | 1.21.9 | ✓ | n/t | |
 | 1.21.10 | ✓ | n/t | |
 | 1.21.11 | ✓ | n/t | |
@@ -38,9 +38,19 @@ boots a headless server in CI (offline mode, RCON enabled), loads VigilAC, and v
 - no line mentioning `VigilAC` with `Exception` or `SEVERE` is logged,
 - the full server log is uploaded as a workflow artifact (`integration-server-log`).
 
-No load-time, join/quit, or gameplay-driven behavior was verified against versions other than
-1.21.8. Performance characteristics under load (TPS impact, GC pressure) have **not** been
-measured; see [SECURITY_REVIEW.md](SECURITY_REVIEW.md) and the roadmap for validation gaps.
+Runtime validation on 1.21.8 covers: plugin load/enable, PacketEvents-absent path, commands over
+RCON, join/quit lifecycle is exercised implicitly (no players join in CI), storage initialization
+and clean shutdown. It does **not** cover: in-game movement/combat detection behavior against a
+live client, join/quit with real players, TPS under load, or memory profiling. Performance
+characteristics under load (TPS impact, GC pressure) have **not** been measured; see
+[SECURITY_REVIEW.md](SECURITY_REVIEW.md) and the roadmap for validation gaps.
+
+### Incidents found and fixed by the runtime test
+- First boots disabled VigilAC with `NoClassDefFoundError: com/github/retrooper/packetevents/...`
+  because class resolution at the `PacketEventsHook.tryRegister` call site loaded the optional
+  API even when packetevents is absent. Fixed by splitting the implementation into
+  `PacketEventsMetrics`, resolved only past the presence gate (commit `a026158`). The runtime
+  smoke test now fails the build on any `Error occurred while enabling VigilAC` line.
 
 ## Paper-specific API surface in use
 

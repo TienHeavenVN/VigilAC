@@ -305,6 +305,24 @@ jobs:
               print('::error title=ServerLogError::' + block[:1900])
           PYEOF
 
+      - name: "Server log: first ERROR block (diagnostic)"
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          lines = open('server/server.log', encoding='utf8', errors='replace').read().splitlines()
+          idx = None
+          for i, line in enumerate(lines):
+              if 'ERROR' in line or 'Exception' in line or 'Caused' in line:
+                  idx = i
+                  break
+          if idx is None:
+              print('::notice title=ServerLogError::no ERROR lines found')
+          else:
+              block = ' | '.join(lines[max(0, idx - 2):idx + 24])
+              block = block.replace('%', '%25').replace('\r', ' ').replace('\n', ' ')
+              print('::error title=ServerLogError::' + block[:1900])
+          PYEOF
+
       - name: Server log tail (diagnostic)
         if: always()
         run: |
