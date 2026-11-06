@@ -29,7 +29,22 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Compile main sources
-        run: ./gradlew compileJava --no-daemon --stacktrace
+        run: |
+          set +e
+          ./gradlew compileJava --no-daemon > compile.log 2>&1
+          code=$?
+          tail -n 30 compile.log
+          if [ $code -ne 0 ]; then
+            python3 - <<'PYEOF'
+            import html
+            text = open('compile.log', encoding='utf8', errors='replace').read()
+            lines = [l for l in text.splitlines() if l.strip()][-12:]
+            blob = ' | '.join(lines)
+            blob = html.unescape(blob).replace('%', '%25').replace('\r', '%0D').replace('\n', ' ')
+            print('::error title=GradleBuild::' + blob[:1800])
+PYEOF
+            exit $code
+          fi
 
       - name: Compile test sources
         run: ./gradlew compileTestJava --no-daemon --stacktrace
