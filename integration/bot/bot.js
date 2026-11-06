@@ -58,6 +58,7 @@ const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
 const result = {
   scenario: scenarioId,
+  log: [],
   kind: scenario.kind,
   expect: scenario.expect,
   description: scenario.description,
@@ -78,7 +79,19 @@ const bot = mineflayer.createBot({
   viewDistance: 'small',
 });
 
+const tlog = (m) => {
+  if (result.log.length < 60) result.log.push(`${Math.floor(performance.now())}:${m}`);
+};
+bot.on('kicked', (reason) => {
+  let txt;
+  try { txt = typeof reason === 'string' ? reason : JSON.stringify(reason); } catch { txt = String(reason); }
+  tlog('KICKED ' + String(txt).slice(0, 300));
+});
+bot.on('message', (msg) => tlog('CHAT ' + msg.toString().slice(0, 120)));
+bot.on('error', (err) => tlog('ERROR ' + String(err).slice(0, 200)));
+
 bot.once('spawn', async () => {
+  tlog('SPAWNED');
   try {
     // NOTE: the scenario bot is deliberately NOT op'd. Our permission defaults
     // grant vigilac.exempt to ops, which would silently exempt the bot from all

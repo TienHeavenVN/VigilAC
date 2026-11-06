@@ -47,9 +47,8 @@ echo "scenarios: $SCENARIOS"
 echo "== running scenarios =="
 pass=0; fail=0; unable=0
 for sc in $SCENARIOS; do
-  botname="BotP3$(echo "$sc" | tr -cd 'a-z' | cut -c1-12)"
-  # unique-ish account per scenario for clean VL attribution
-  botname="${botname}$$"
+  # Minecraft usernames are limited to 16 chars: B + hash(scenario) + hash(pid+random)
+  botname="B$(printf '%s' "$sc" | md5sum | cut -c1-4)$(printf '%s' "$$$RANDOM$sc" | md5sum | cut -c1-6)"
   echo "--- $sc as $botname ---"
   (cd "$ROOT/integration/bot" && node bot.js "$botname" "$PORT" "$sc" "$RESULTS/$sc.json")
   rc=$?
@@ -68,7 +67,7 @@ if [ "${RUN_LATENCY_PASS:-0}" = "1" ] && sudo -n true 2>/dev/null; then
     for sc in $SCENARIOS; do
       case "$sc" in legit-*) ;; *) continue;; esac
       lsc="${sc}-lat"
-      botname="BotP3$(echo "$sc" | tr -cd 'a-z' | cut -c1-10)lat$$"
+      botname="BL$(printf '%s' "$sc" | md5sum | cut -c1-4)lat$(printf '%s' "$$$RANDOM" | md5sum | cut -c1-3)"
       echo "--- $lsc as $botname ---"
       (cd "$ROOT/integration/bot" && node bot.js "$botname" "$PORT" "$lsc" "$RESULTS/$lsc.json") || true
     done

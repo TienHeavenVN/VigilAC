@@ -68,7 +68,8 @@ for f in sorted(glob.glob(os.path.join(VDIR, '*.json'))):
     if entry['verdict'] == 'PASS':
         continue  # PASS lines stay in the manifest; keep annotation budget for failures
     msg = json.dumps({'verdict': entry['verdict'], 'vl': vl, 'evidence': entry.get('evidence', [])[:8],
-                      'debug': entry['debugLines'][:6], 'error': entry.get('harnessError')})[:1200]
+                      'debug': entry['debugLines'][:6], 'error': entry.get('harnessError'),
+                      'log': entry.get('log', [])[-12:]})[:1800]
     print(f'::notice title=LiveTest-{entry["scenario"]}::{msg}')
 
 with open(os.path.join(VDIR, 'manifest.json'), 'w') as fh:
