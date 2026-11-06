@@ -1,51 +1,51 @@
 # VigilAC
 
-A production-oriented anti-cheat plugin for **Paper 1.21.8** servers.
+A production-oriented anti-cheat plugin for **Paper** servers — **Minecraft 1.21.x**, Java **21**.
 
 VigilAC detects cheating with **real detection logic** — no placeholder checks, no fake thresholds,
-no suppression flags. Every implemented check documents its algorithm, its false-positive analysis
-and its tunables, and is covered by unit tests.
+no suppression flags. Every check documents its algorithm, its false-positive analysis and its
+tunables, and is covered by unit tests.
 
 > **Default mode is `alert-only`.** VigilAC will never kick, ban or punish anyone until you
 > explicitly set `mode: punish` in `config.yml` *and* tune thresholds for your server.
 
 ## Status
 
-| Feature | State |
-|---|---|
-| Check framework (`Check`, `CheckManager`, `DetectionContext`, `AttackContext`) | Implemented |
-| Violation pipeline (VL accumulation, decay, verdicts, async SQLite audit log) | Implemented |
-| **SpeedCheck** (movement) | Implemented + unit tested |
-| **ReachCheck** (combat) | Implemented + unit tested |
-| Fly, KillAura, Timer and further modules | Roadmap (not implemented — see [docs/ROADMAP.md](docs/ROADMAP.md)) |
-| Folia support | **Not supported** (not threaded for the regionized scheduler) |
+| Level | Checks | State |
+|---|---|---|
+| Framework | `Check`, `CheckManager`, contexts, `PlayerData`, `ViolationManager`, async SQLite audit | Implemented + unit tested |
+| Movement | `speed`, `fly`, `timer`, `no-fall`, `invalid-movement` | Implemented + unit tested |
+| Combat | `reach`, `kill-aura`, `auto-clicker`, `aim-assist` | Implemented + unit tested |
+| Player | `scaffold`, `fast-place`, `fast-break` | Implemented + unit tested |
 
-Only SpeedCheck and ReachCheck ship today. No detection ships as a stub.
+All twelve checks ship today; no detection ships as a stub. See
+[docs/CHECKS.md](docs/CHECKS.md) for algorithms and [docs/ROADMAP.md](docs/ROADMAP.md) for what is
+intentionally not implemented.
 
 ## Requirements
 
-- Paper **1.21.8** (or a Paper fork for the same version), Java **21**
-- Optional: [packetevents](https://github.com/retrooper/packetevents) plugin — enables per-player packet throughput metrics (`/vigilac info`). All checks work without it.
+- Paper **1.21.x** (see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the tested matrix), Java **21**
+- Optional: [packetevents](https://github.com/retrooper/packetevents) plugin — enables `/vigilac info` packet throughput metrics. All checks work without it.
 
 ## Installation
 
-1. Download `VigilAC.jar` (build it yourself, see below, or from CI artifacts).
+1. Download `VigilAC.jar` (build it yourself, see below, or from CI artifacts — includes a `.sha256` checksum).
 2. Put it in your server's `plugins/` directory.
-3. Restart the server.
+3. Restart the server; watch your console for `VigilAC enabled: 12 checks registered`.
 4. Edit `plugins/VigilAC/config.yml`. Start with defaults (`mode: alert-only`) and watch alerts for a few days.
-5. Optionally enable punishments with `mode: punish` once thresholds are tuned.
+5. Optionally switch to `mode: punish` once thresholds are tuned for your server.
 
-See [docs/INSTALLATION.md](docs/INSTALLATION.md) for the full guide.
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for the full guide and the headless CI smoke-test procedure.
 
 ## Building
 
 ```bash
-./gradlew build
+./gradlew build            # unit tests + shaded JAR with the SQLite driver
+./gradlew build -PpaperApiVersion=1.21.4-R0.1-SNAPSHOT   # build against a specific 1.21.x API
 ```
 
-Produces `build/libs/VigilAC.jar` (shaded, with the SQLite driver bundled) and runs the unit test
-suite. Requires JDK 21; dependencies resolve from Maven Central, papermc.io and codemc (see
-`settings.gradle.kts`).
+Produces `build/libs/VigilAC.jar`. Dependencies resolve from repositories declared in
+`settings.gradle.kts` (papermc.io, CodeMC, Maven Central) — no mirrors, no TLS bypasses.
 
 ## Commands
 
@@ -63,47 +63,49 @@ Base permission: `vigilac.command` (default: op). Every subcommand checks its ow
 
 Full reference: [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 
-## What the built-in checks do
+## The built-in checks
 
-### Speed (`speed`, movement)
-Sustained horizontal speed above the vanilla-derived cap (walk 4.317 / sprint 5.612 blocks/s,
-+20% per Speed potion level, 1.6× on ice/slime), tracked with an exponential moving average and a
-min-sustain gate — a single laggy burst can never flag. Teleports, knockback, vehicles, elytra,
-liquids and <10 TPS suppress the check; teleport/velocity events install grace windows.
-
-### Reach (`reach`, combat)
-Attack distance from the attacker's eye position to the target's axis-aligned bounding box
-(the same quantity vanilla uses). An attack counts as over-reach above `max-reach + tolerance`
-(default 3.03); **four consecutive** over-reach attacks *and* a windowed average above the cap are
-required before VL is added. Creative/spectator and attacks from vehicles are exempt.
+| Check | Category | Evidence |
+|---|---|---|
+| `speed` | movement | EMA of horizontal speed vs vanilla cap (walk 4.317 / sprint 5.612, +20%/Speed potion, slippery multiplier), min-sustain gate |
+| `reach` | combat | eye-to-AABB attack distance vs 3.0 (+tolerance), consecutive + windowed average gates |
+| `fly` | movement | sustained airborne time without descent (hover) or upward motion (rising flight) |
+| `timer` | movement | movement-packet rate sustained above 21.5/s for 3s |
+| `no-fall` | movement | accumulated descent at landing vs damage-event signal; streak of 3 required |
+| `invalid-movement` | movement | non-finite geometry; per-tick vertical travel above terminal velocity |
+| `kill-aura` | combat | ≥3 distinct damaged entities within 1s (attack-cooldown-limited swings) |
+| `auto-clicker` | combat | CPS > 20.5, or metronomic intervals (stddev < 12 ms) sustained |
+| `aim-assist` | combat | rotation teleports landing on new targets; ≥4 consecutive snaps |
+| `scaffold` | player | ≥6 consecutive placements at >80° from the look vector |
+| `fast-place` | player | sustained placement rate above the 4-tick cooldown ceiling (7/s) |
+| `fast-break` | player | breaks faster than the vanilla hardness/Efficiency/Haste lower bound |
 
 Algorithm details, thresholds and false-positive analysis: [docs/CHECKS.md](docs/CHECKS.md).
 
 ## Architecture
 
 ```
-Listener (main thread, O(1)) ──► DetectionContext/AttackContext (immutable, server-agnostic)
-        │
+Listener (main thread, O(1)) ──► DetectionContext / AttackContext / PlaceContext / BreakContext
+        │                          (immutable, server-agnostic)
         ▼
-CheckManager ──► SpeedCheck / ReachCheck ──► ViolationCallback
-        │
+CheckManager ──► 12 checks ──► ViolationCallback
         ▼
 ViolationPipeline (exemptions, debug) ──► ViolationManager (VL, decay)
-        │
         ▼
 PunishmentManager ──► AlertManager (staff)  +  DatabaseManager (async SQLite audit)
 ```
 
 - All domain classes (`ac.vigil.check.*`, `ac.vigil.data.*`, `ac.vigil.detection.*`,
-  `ac.vigil.violation.*`) are **server-agnostic** — unit-testable without a live server.
-- Per-player state lives in `PlayerData` (thread-safe VL maps, trackers, grace windows) and is
-  released on quit.
+  `ac.vigil.violation.*`) are **server-agnostic** — unit-tested without a live server.
+- Per-player state lives in `PlayerData` (thread-safe VL maps, `MovementTracker`,
+  `CombatTracker`, `BlockActionTracker`, grace windows) and is released on quit.
 - Violations persist to SQLite asynchronously (batched, WAL mode).
 
 ## Configuration
 
 See the annotated [`config.yml`](src/main/resources/config.yml). Default mode is `alert-only`;
-punishments (kicks at `kick-vl`) require `mode: punish`.
+punishments (kicks at `kick-vl`) require `mode: punish`. A boot-time `ConfigValidator` logs any
+incoherent VL ladder (alert ≤ warn ≤ kick ≤ max) as a warning.
 
 ## Testing
 
@@ -111,14 +113,21 @@ punishments (kicks at `kick-vl`) require `mode: punish`.
 ./gradlew test
 ```
 
-Unit tests cover both checks (flag/no-flag matrices incl. vehicle/elytra/ice/TPS/knockback cases),
-the violation pipeline (VL accumulation, cap, verdict escalation, decay) and the packaging contract
-of `config.yml`/`plugin.yml`.
+Unit tests cover detection matrices for all twelve checks (flag/no-flag scenarios incl.
+vehicle/elytra/liquid/TPS/knockback/potion cases), the violation pipeline (VL accumulation, cap,
+verdict escalation, decay), the config validator, the SQLite storage layer (round-trip on a real
+file) and the packaging contract of `config.yml`/`plugin.yml`.
+
+CI also runs a **runtime smoke test**: it downloads the official Paper 1.21.8 build from
+`api.papermc.io`, boots a headless server with VigilAC installed, drives `/plugins` and
+`/vigilac info` over RCON, and verifies clean enable/disable and the SQLite audit file — see
+`.github/workflows/ci.yml`.
 
 ## Compatibility
 
-- **Paper 1.21.8**: target platform.
-- **Purpur**: expected to work (Paper-compatible fork) but **not tested** by CI.
+- **Paper 1.21.x**: see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) — each version is compiled
+  and unit-tested in CI's compatibility matrix; runtime validation is performed on 1.21.8.
+- **Purpur**: expected to work (Paper-compatible fork) but **not tested**.
 - **Spigot**: not supported (uses Paper APIs such as `Server#getTPS()`).
 - **Folia**: **not supported**; the plugin uses the legacy scheduler API.
 
