@@ -10,3 +10,7 @@ integration/server/
 integration/out/
 integration/live.pid
 integration/staff.pid
+
+# Bot harness dependencies (installed via npm ci in CI)
+node_modules/
+integration/bot/node_modules/
