@@ -60,10 +60,11 @@ def main() -> int:
 
         send_packet(sock, 2, REQUEST_COMMAND, command)
         # RCON has no end-of-response marker. Drain packets until the server
-        # goes quiet: 3s for the first byte (the server is usually instant on
-        # loopback), then a short 0.4s idle grace so multi-packet responses
-        # are reassembled without paying a long stall per call.
-        sock.settimeout(3.0)
+        # goes quiet: 10s for the first byte (fresh worlds answer slowly on a
+        # loaded runner - a 3s cap broke the forceload step), then a short
+        # 0.5s idle grace so multi-packet responses are reassembled without
+        # paying a long stall per call.
+        sock.settimeout(10.0)
         chunks = []
         first = True
         while True:
@@ -72,7 +73,7 @@ def main() -> int:
             except (socket.timeout, TimeoutError, EOFError, OSError):
                 break
             if first:
-                sock.settimeout(0.4)
+                sock.settimeout(0.5)
                 first = False
             if request_id == 2:
                 chunks.append(payload)
