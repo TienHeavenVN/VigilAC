@@ -31,6 +31,12 @@ for i in $(seq 1 120); do
 done
 grep -q 'Done (' server.log || { echo '::error title=ServerTimeout::no Done in 240s'; tail -n 40 server.log; exit 1; }
 grep -q 'VigilAC enabled:' server.log || { echo '::error title=PluginNotEnabled::success marker missing'; exit 1; }
+echo "== building deterministic test pad =="
+python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci "fill -24 63 -24 24 63 24 minecraft:stone" || true
+python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci "fill -24 64 -24 24 76 24 minecraft:air" || true
+python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci "setworldspawn 0 64 0" || true
+python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci "tp @s 0 64 0" || true
+echo "== pad ready =="
 echo "server up; installing node deps"
 (cd "$ROOT/integration/bot" && npm ci --no-audit --no-fund -q) || { echo '::error title=NpmCi::bot deps failed'; exit 1; }
 SCENARIOS=$(node -e "console.log(Object.keys(require('$ROOT/integration/bot/scenarios.js').scenarios).join(' '))")

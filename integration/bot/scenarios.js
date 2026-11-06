@@ -1,3 +1,13 @@
+define('illegal-overspeed', { kind: 'illegal', description: '6.4 b/s horizontal walk (above 4.4 walk cap, under Paper revert threshold)', expect: ['speed'] }, async (bot, api) => {
+  bot.physicsEnabled = false;
+  const end = Date.now() + 10000;
+  while (Date.now() < end) {
+    forgeMove(bot, 0.32, 0, 0, true);
+    await api.sleep(50);
+  }
+  api.result.evidence.push('moved +0.32 blocks/packet at 20 Hz (~6.4 b/s) for 10s');
+});
+
 /**
  * Scenario definitions for the VigilAC live test harness.
  *
@@ -226,6 +236,7 @@ define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tole
   const name = api.result.username;
   for (const dist of [3.6, 4.5, 5.0]) {
     api.rcon(`execute at ${name} run summon minecraft:zombie ~${dist} ~ ~`);
+    api.rcon(`execute as @e[type=zombie,sort=nearest,limit=1] at @s run effect give @s slowness 9999 255 true`);
   }
   await api.sleep(1000);
   for (let i = 0; i < 3; i++) {
@@ -243,7 +254,9 @@ define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tole
 define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS on a single victim, re-summoning only after it dies (kill-aura isolated)', expect: ['auto-clicker'] }, async (bot, api) => {
   const name = api.result.username;
   api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~`);
-  await api.sleep(800);
+  await api.sleep(400);
+  api.rcon(`execute as @e[type=zombie] at @s run effect give @s slowness 9999 255 true`);
+  await api.sleep(400);
   const end = Date.now() + 12000;
   let attacks = 0, resummons = 0;
   while (Date.now() < end) {
@@ -267,6 +280,7 @@ define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinc
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }, { x: 0, z: 2 }, { x: 0, z: -2 }]) {
     api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z}`);
   }
+  api.rcon(`execute as @e[type=zombie] at @s run effect give @s slowness 9999 255 true`);
   await api.sleep(1500);
   const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 4);
@@ -360,6 +374,7 @@ define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree sna
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }]) {
     api.rcon(`execute at ${api.result.username} run summon minecraft:zombie ~${off.x} ~ ~${off.z}`);
   }
+  api.rcon(`execute as @e[type=zombie] at @s run effect give @s slowness 9999 255 true`);
   await api.sleep(1500);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 2);
   if (zombies.length < 2) { api.result.evidence.push('zombies tracked: ' + zombies.length); return; }
