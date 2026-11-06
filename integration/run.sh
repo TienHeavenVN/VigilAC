@@ -67,6 +67,7 @@ if [ "${RUN_LATENCY_PASS:-0}" = "1" ] && sudo -n true 2>/dev/null; then
       case "$sc" in legit-*) ;; *) continue;; esac
       lsc="${sc}-lat"
       botname="BL$(printf '%s' "$sc" | md5sum | cut -c1-4)lat$(printf '%s' "$$$RANDOM" | md5sum | cut -c1-3)"
+      echo "$lsc $botname" >> "$RESULTS/scenario-names.txt"
       echo "--- $lsc as $botname ---"
       (cd "$ROOT/integration/bot" && node bot.js "$botname" "$PORT" "$lsc" "$RESULTS/$lsc.json" > "$RESULTS/$lsc.console.log" 2>&1) || true
     done
