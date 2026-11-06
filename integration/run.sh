@@ -39,8 +39,8 @@ PAD_STONE=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "fill -24 6
 echo "pad stone fill -> $PAD_STONE"
 PAD_AIR=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "fill -24 64 -24 24 76 24 minecraft:air")
 echo "pad air fill -> $PAD_AIR"
-case "$PAD_STONE" in *"Successfully filled"*) ;; *) echo "::error title=PadFillFailed::stone fill did not succeed: '$PAD_STONE'"; exit 1;; esac
-case "$PAD_AIR" in *"Successfully filled"*) ;; *) echo "::error title=PadFillFailed::air fill did not succeed: '$PAD_AIR'"; exit 1;; esac
+case "$PAD_STONE" in *"Successfully filled"*|*"No blocks were filled"*) ;; *) echo "::error title=PadFillFailed::stone fill did not succeed: '$PAD_STONE'"; exit 1;; esac
+case "$PAD_AIR" in *"Successfully filled"*|*"No blocks were filled"*) ;; *) echo "::error title=PadFillFailed::air fill did not succeed: '$PAD_AIR'"; exit 1;; esac
 python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "setworldspawn 0 64 0" || true
 python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "tp @s 0 64 0" || true
 echo "== pad ready =="
