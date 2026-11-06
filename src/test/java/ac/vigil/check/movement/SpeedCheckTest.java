@@ -21,7 +21,7 @@ class SpeedCheckTest {
 
     @BeforeEach
     void setUp() {
-        check = new SpeedCheck(4.4D, 5.8D, 0.2D, 1.6D, 2.0D, 1_200L); // walkCap, sprintCap, potionBonus, slipperyMultiplier, excessVlPerSecond, minSustainSeconds
+        check = new SpeedCheck(4.4D, 5.8D, 0.2D, 1.6D, 2.0D, 1.2D); // walkCap, sprintCap, potionBonus, slipperyMultiplier, excessVlPerSecond, minSustainSeconds
         data = new PlayerData(PLAYER);
         flagged = new ArrayList<>();
     }

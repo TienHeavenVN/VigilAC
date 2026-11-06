@@ -9,14 +9,14 @@ class MovementTrackerTest {
     @Test
     void rawRingCountsOnlyTrailingSecond() {
         MovementTracker tracker = new MovementTracker();
-        long now = 1_000_000L;
+        long t0 = 1_000_000L;
         for (int i = 0; i < 30; i++) {
-            tracker.noteRawMovePacket(now);
-            now += 20L;
+            tracker.noteRawMovePacket(t0 + i * 20L);
         }
-        assertEquals(30.0D, tracker.rawMovePacketsPerSecond(now), 0.001D,
+        long inside = t0 + 600L;
+        assertEquals(30.0D, tracker.rawMovePacketsPerSecond(inside), 0.001D,
                 "30 packets inside the trailing second must count fully");
-        long later = now - 60_000L;
+        long later = t0 + 60_000L;
         assertEquals(0.0D, tracker.rawMovePacketsPerSecond(later), 0.001D,
                 "packets older than the trailing second must not count");
     }
