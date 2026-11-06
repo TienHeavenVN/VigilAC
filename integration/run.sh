@@ -32,6 +32,9 @@ done
 grep -q 'Done (' server.log || { echo '::error title=ServerTimeout::no Done in 240s'; tail -n 40 server.log; exit 1; }
 grep -q 'VigilAC enabled:' server.log || { echo '::error title=PluginNotEnabled::success marker missing'; exit 1; }
 echo "== building deterministic test pad =="
+FL=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "forceload add -24 -24 24 24")
+echo "forceload -> $FL"
+case "$FL" in *forceload*|*loaded*) ;; *) echo "::error title=PadForceload::forceload did not succeed: '$FL'"; exit 1;; esac
 PAD_STONE=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "fill -24 63 -24 24 63 24 minecraft:stone")
 echo "pad stone fill -> $PAD_STONE"
 PAD_AIR=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "fill -24 64 -24 24 76 24 minecraft:air")
