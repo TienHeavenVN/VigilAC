@@ -89,6 +89,25 @@ python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci stop > /dev/null 2>&1 |
 for i in $(seq 1 30); do kill -0 "$(cat "$ROOT/integration/live.pid")" 2>/dev/null || break; sleep 2; done
 tail -n 15 "$SRV/server.log"
 
+echo "== raw results inspection =="
+python3 - "$RESULTS" <<'PY'
+import json, glob, os, sys
+vdir = sys.argv[1]
+files = sorted(f for f in glob.glob(os.path.join(vdir, '*.json')) if not f.endswith('manifest.json'))
+print('result files:', len(files))
+tot = {'ok': 0, 'err': 0, 'ev_zero': 0, 'ev_some': 0}
+sample = None
+for f in files:
+    d = json.load(open(f))
+    if d.get('harnessError'): tot['err'] += 1
+    else: tot['ok'] += 1
+    if len(d.get('evidence', [])) == 0: tot['ev_zero'] += 1
+    else: tot['ev_some'] += 1
+    if os.path.basename(f) == 'illegal-timer.json': sample = d
+print('ok:', tot['ok'], 'err:', tot['err'], 'evidence empty:', tot['ev_zero'], 'evidence present:', tot['ev_some'])
+if sample:
+    print('::notice title=RawSample::' + json.dumps(sample)[:1500])
+PY
 echo "== scoring =="
 python3 "$ROOT/integration/score.py" "$RESULTS"
 
