@@ -253,6 +253,10 @@ jobs:
           echo $! > ../server.pid
           for i in $(seq 1 120); do
             if grep -q 'Done (' server.log; then echo "server ready after ~$((i * 2))s"; break; fi
+            if grep -q 'Error occurred while enabling VigilAC' server.log; then
+              echo "::error title=PluginEnableFailed::VigilAC threw during enable"
+              exit 1
+            fi
             if ! kill -0 "$(cat ../server.pid)" 2>/dev/null; then
               echo "::error title=ServerDied::Paper process exited during boot"
               tail -n 60 server.log || true
@@ -261,7 +265,7 @@ jobs:
             sleep 2
           done
           grep -q 'Done (' server.log || { echo "::error title=ServerTimeout::server did not report ready in 240s"; tail -n 60 server.log; exit 1; }
-          grep -q 'Enabling VigilAC' server.log || { echo "::error title=PluginNotEnabled::Enabling VigilAC not found in server.log"; exit 1; }
+          grep -q 'VigilAC enabled:' server.log || { echo "::error title=PluginNotEnabled::VigilAC success marker not found in server.log"; exit 1; }
 
       - name: "RCON: plugins, vigilac info, vigilac violations"
         run: |
