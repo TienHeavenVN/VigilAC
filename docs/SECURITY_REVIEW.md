@@ -41,3 +41,20 @@ unsafe I/O on hot paths, and third-party code execution.
 
 Report suspected vulnerabilities to the repository issue tracker with reproduction steps. Do not
 post working kick-evasion configs publicly ahead of a fix.
+
+## Addendum: Phase 2 hardening (2026-11-06)
+
+Additional review scope: the ten new detection checks, their listeners, `ConfigValidator`,
+`BreakContext`/`PlaceContext`/`AttackContext`, `BlockActionTracker`/`MovementTracker`/
+`CombatTracker`, `tools/rcon.py` (CI-only), and the new CI jobs.
+
+| Area | Assessment |
+|---|---|
+| New player-facing input | None. No new commands, permissions or placeholders were added; `commands-on-*` semantics unchanged. |
+| Detection state | All per-player detection state lives in `PlayerData` trackers and is cleared on quit (and on reload for exemptions). Check singletons are stateless. |
+| Config validation | `ConfigValidator` runs at enable and on `/vigilac reload`; incoherent VL ladders (alert > warn > kick ordering) and non-finite thresholds log `warning` lines and never crash the plugin. Invalid values cannot escape as NaN/Infinity into detection math because contexts and config reads are finite-checked before use. |
+| Resource usage of new checks | All O(1) per event; the only O(n) scans are bounded combat-target windows (≤ tens of entries) and the auto-clicker sample ring (configurable, default ≤ 60 samples). |
+| Block hardness data | `fast-break` reads `Material#getHardness()` (static, server-controlled). No client-influenced data enters the calculation. |
+| CI integration tooling | `tools/rcon.py` speaks Source RCON to `127.0.0.1` in CI only, with an ephemeral password (`vigilac-ci`) scoped to the ephemeral CI runner. It is never loaded or executed by the plugin. The CI smoke test runs `online-mode=false` on an isolated runner — no real accounts, no production data. |
+| Dependency hygiene | Dependencies resolve from `repo.papermc.io`, CodeMC and Maven Central only; no mirrors, no TLS bypass flags, no unverified artifacts. CI performs a per-version existence probe (HTTP 404 ⇒ job fails fast before building). |
+| Unverified areas (honest) | No profiler has been run; hot-path zero-allocation claims are from code inspection. No fuzzing of config inputs beyond the validator's finite checks. No runtime exploit testing of detection bypasses has been performed. |

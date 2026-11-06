@@ -1,28 +1,34 @@
 # VigilAC roadmap
 
-Shipped today: framework, VL/decay, async SQLite audit, alerts/warnings/kicks, SpeedCheck,
-ReachCheck, `/vigilac` command tree. Everything below is **not implemented**; no stubs are present
-in the codebase.
+Shipped today (all with real detection logic, tunables and unit tests):
 
-## Movement
-Fly, AirWalk, NoFall, Jesus, Spider, Step, Timer, invalid-movement (prediction-vs-simulation).
-Groundwork that already exists: `DetectionContext` (ground/liquid/vehicle/elytra/slippery),
-`MovementTracker`-equivalent per-player state in `PlayerData`, teleport/velocity grace gates,
-low-TPS gate. A proper Fly check will compare vertical motion against expected jump/fall physics
-with the same sustain machinery as SpeedCheck.
+- **Framework**: VL accumulation/decay, async SQLite audit, alerts/warnings/kicks (default
+  alert-only), `/vigilac` command tree, per-check enable/disable, boot-time config validation.
+- **Movement**: `speed`, `fly`, `timer`, `no-fall`, `invalid-movement`.
+- **Combat**: `reach`, `kill-aura`, `auto-clicker`, `aim-assist`.
+- **Player**: `scaffold`, `fast-place`, `fast-break`.
+- **Compatibility CI**: per-version `paper-api` compile + unit-test matrix (see
+  [COMPATIBILITY.md](COMPATIBILITY.md)); runtime smoke test booting real Paper 1.21.8 in CI.
 
-## Combat
-KillAura, AimAssist, AutoClicker, Criticals, AntiKnockback, Velocity. ReachCheck's attack-AABB
-distance and streak machinery generalizes (AttackContext is reused).
+## Next (not implemented — no stubs exist)
 
-## Player
-Scaffold, FastBreak, FastPlace, InventoryMove.
+### Detection
+- **Velocity / AntiKnockback**: knockback-resistance inference from velocity events (needs per-player
+  velocity-response tracking).
+- **Criticals**: jump-crit damage pattern analysis (needs a jump-state model).
+- **Inventory move**: item movement outside the inventory screen.
+- **Spider / Step / Jesus**: wall-climbing, stair-stepping and water-walking (require block-context
+  resolution at move time).
 
-## Packet
-Timer (packet-rate analysis), packet-spam, invalid sequences. packetevents is already a
-compile-time/soft dependency and packet-rate counters surface in `/vigilac info`; a real Timer
-check will use those statistics with a sustained-excess gate like the movement checks.
+### Platform
+- **Integration test depth**: scripted join/quit, movement simulation and combat simulation against a
+  real server (current CI verifies boot/load/commands/shutdown only; in-game behavior is untested).
+- **Folia**: requires regionized-scheduler threading of all listeners and `PlayerData` lifecycle.
+- **1.21.2 support**: blocked upstream — `paper-api` is not published for that version.
+- **Performance profiling**: no CPU/heap baselines exist yet (allocation-free hot path is claimed
+  from code inspection only).
+- **Web dashboard / violation export API**: not started.
 
-## Compatibility notes
-- Folia: unsupported (legacy scheduler; no region threading implemented or tested).
-- Purpur: untested; expected compatible.
+## Not planned
+- Heuristic "JavaScript engine" config checks, or any detection shipped as a stub.
+- Offline deobfuscation tooling for anticheat client mods.

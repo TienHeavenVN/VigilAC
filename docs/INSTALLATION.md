@@ -2,15 +2,18 @@
 
 ## Prerequisites
 
-- A **Paper 1.21.8** server (Purpur also expected to work but is not CI-tested), running **Java 21**.
+- A **Paper 1.21.x** server (1.21.2 has no published `paper-api` and is unsupported; see
+  [COMPATIBILITY.md](COMPATIBILITY.md)), running **Java 21**. Runtime-validated in CI on **1.21.8**;
+  other 1.21.x versions pass compile + unit tests but are not runtime-validated.
 - Optional: the **packetevents** plugin (2.x) for packet throughput metrics. Without it, VigilAC
   logs a one-line info message and continues; every check works.
 
 ## Steps
 
 1. Build or download `VigilAC.jar`:
-   - from CI artifacts (Actions → CI → *VigilAC.jar*), or
+   - from CI artifacts (Actions → CI → *VigilAC* — includes `VigilAC.jar.sha256`), or
    - `./gradlew build` (requires JDK 21; resolves Paper API from papermc.io).
+   - Verify the download: `sha256sum -c VigilAC.jar.sha256`.
 2. Copy the jar into the server's `plugins/` folder.
 3. Start the server once; VigilAC writes `plugins/VigilAC/config.yml`.
 4. **Leave `mode: alert-only` for at least a week.** Watch `[VigilAC] ...` alerts and tune
@@ -21,6 +24,11 @@
      `punishments.commands-on-warn` / `commands-on-kick` (console commands with `%player%`, `%check%`).
 
 ## Verifying the installation
+
+The same verification a human does is automated in CI (see the `integration` job in
+`.github/workflows/ci.yml`): a headless Paper 1.21.8 server is booted with the plugin installed,
+`Enabling VigilAC` is asserted in the log, and `/plugins`, `/vigilac info` and
+`/vigilac violations` are driven over RCON.
 
 ```
 /vigilac info

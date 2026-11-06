@@ -203,29 +203,33 @@ jobs:
       - name: Build plugin
         run: ./gradlew shadowJar --no-daemon -q
 
-      - name: Download Paper 1.21.8 (official API)
+      - name: Download Paper 1.21.8 (official API, SHA-256 verified)
         run: |
           set -euo pipefail
+          API="https://api.papermc.io/v2/projects/paper"
           mkdir -p server/plugins
-          echo '== GET version metadata =='
-          curl -sS -w 'HTTP %{http_code}\n' "https://api.papermc.io/v2/projects/paper/versions/1.21.8" -o meta.json && echo >> meta.json
-          cat meta.json
-          BUILD=$(jq -r '.builds[-1] // ""' meta.json)
+          echo "== GET $API/versions/1.21.8/builds =="
+          curl -sS -w 'HTTP %{http_code}\n' "$API/versions/1.21.8/builds" -o builds.json
+          head -c 300 builds.json; echo
+          BUILD=$(jq -r '.builds[-1] // ""' builds.json)
           if [ -z "$BUILD" ]; then
-            echo "::error title=PaperMeta::could not parse build list for 1.21.8 from api.papermc.io"
+            echo "::error title=PaperMeta::could not list builds for 1.21.8 from api.papermc.io"
             exit 1
           fi
-          echo "Using Paper 1.21.8 build $BUILD"
-          URL="https://api.papermc.io/v2/projects/paper/versions/1.21.8/builds/${BUILD}/downloads/paper-1.21.8-${BUILD}.jar"
+          echo "Latest Paper 1.21.8 build: $BUILD"
+          curl -sS -w 'HTTP %{http_code}\n' "$API/versions/1.21.8/builds/$BUILD" -o build.json
+          head -c 500 build.json; echo
+          NAME=$(jq -r '.downloads.application.name // ""' build.json)
+          SHA=$(jq -r '.downloads.application.sha256 // ""' build.json)
+          if [ -z "$NAME" ] || [ -z "$SHA" ]; then
+            echo "::error title=PaperMeta::build metadata lacks downloads.application.{name,sha256}"
+            exit 1
+          fi
+          URL="$API/versions/1.21.8/builds/$BUILD/downloads/$NAME"
           echo "GET $URL"
           curl -sSL -w 'HTTP %{http_code}\n' -o server/paper.jar "$URL"
           ls -la server/paper.jar
-          SIZE=$(stat -c%s server/paper.jar)
-          echo "downloaded $SIZE bytes"
-          if [ "$SIZE" -lt 10000000 ]; then
-            echo "::error title=PaperJar::downloaded jar is suspiciously small ($SIZE bytes)"
-            exit 1
-          fi
+          echo "$SHA  server/paper.jar" | sha256sum -c - || { echo "::error title=PaperJar::SHA-256 mismatch for the Paper download"; exit 1; }
 
       - name: Prepare server directory and properties
         run: |
