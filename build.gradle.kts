@@ -1,14 +1,13 @@
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "8.1.1"
-    id("com.github.spotbugs") version "6.0.27"
 }
 
 group = "ac.vigil"
 version = "1.0.0"
 
 // Overridden by CI's compatibility matrix: -PpaperApiVersion=1.21.4-R0.1-SNAPSHOT
-val paperApiVersion: String by project
+val paperApiVersion = providers.gradleProperty("paperApiVersion").getOrElse("1.21.8-R0.1-SNAPSHOT")
 
 java {
     toolchain {
@@ -51,11 +50,6 @@ tasks.shadowJar {
 
 tasks.named("build") {
     dependsOn(tasks.shadowJar)
-}
-
-// Advisory static analysis: never fails the build, run via `./gradlew spotbugsMain`.
-spotbugs {
-    ignoreFailures.set(true)
 }
 
 tasks.jar {

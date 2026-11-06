@@ -80,11 +80,6 @@ jobs:
       - name: Build shadow JAR
         run: ./gradlew shadowJar --no-daemon --stacktrace
 
-      - name: Static analysis (SpotBugs, advisory)
-        if: always()
-        continue-on-error: true
-        run: ./gradlew spotbugsMain --no-daemon
-
       - name: SHA-256 checksum
         run: sha256sum build/libs/VigilAC.jar | tee build/libs/VigilAC.jar.sha256
 
