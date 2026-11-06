@@ -9,3 +9,4 @@ out/
 integration/server/
 integration/out/
 integration/live.pid
+integration/staff.pid

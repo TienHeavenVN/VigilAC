@@ -10,6 +10,22 @@ import json, glob, os, re, sys
 VDIR = sys.argv[1]
 section = re.compile(r'([a-z][a-z-]+):\s+([0-9]+(?:\.[0-9]+)?)')
 
+# staff observer chat lines -> per-player debug attribution
+staff_debug = {}
+staff_path = os.path.join(VDIR, 'staff-events.jsonl')
+if os.path.exists(staff_path):
+    with open(staff_path) as fh:
+        for line in fh:
+            try:
+                evt = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg = evt.get('msg', '')
+            m = re.search(r'\[([a-z-]+)\] ([A-Za-z0-9_]+): (.+)', msg)
+            if m and ('VigilAC debug' in msg or 'VigilAC' in msg):
+                check, player, detail = m.group(1), m.group(2), m.group(3)
+                staff_debug.setdefault(player, []).append(f'[{check}] {detail}')
+
 def parse_vl(text):
     text = re.sub(r'\xA7[0-9a-fA-FRK-OR]', '', text)  # strip § codes
     pairs = dict(section.findall(text))
@@ -45,8 +61,14 @@ for f in sorted(glob.glob(os.path.join(VDIR, '*.json'))):
         entry['verdict'] = 'PASS' if hits else 'FAIL'
         entry['hits'] = hits
         totals['illegal_pass' if hits else 'illegal_fail'] += 1
+    # merge staff-observer debug attribution for this bot
+    player = entry.get('username')
+    entry['debugLines'] = staff_debug.get(player, entry.get('debugLines', []))
     manifest.append(entry)
-    msg = json.dumps({'verdict': entry['verdict'], 'vl': vl, 'debug': entry.get('debugLines', [])[:6]})[:900]
+    if entry['verdict'] == 'PASS':
+        continue  # PASS lines stay in the manifest; keep annotation budget for failures
+    msg = json.dumps({'verdict': entry['verdict'], 'vl': vl, 'evidence': entry.get('evidence', [])[:8],
+                      'debug': entry['debugLines'][:6], 'error': entry.get('harnessError')})[:1200]
     print(f'::notice title=LiveTest-{entry["scenario"]}::{msg}')
 
 with open(os.path.join(VDIR, 'manifest.json'), 'w') as fh:

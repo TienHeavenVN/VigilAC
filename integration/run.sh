@@ -33,6 +33,10 @@ grep -q 'Done (' server.log || { echo '::error title=ServerTimeout::no Done in 2
 grep -q 'VigilAC enabled:' server.log || { echo '::error title=PluginNotEnabled::success marker missing'; exit 1; }
 echo "server up; installing node deps"
 (cd "$ROOT/integration/bot" && npm ci --no-audit --no-fund -q) || { echo '::error title=NpmCi::bot deps failed'; exit 1; }
+echo "== starting staff observer bot =="
+: > "$RESULTS/staff-events.jsonl"
+(cd "$ROOT/integration/bot" && nohup node bot.js StaffObserver "$PORT" __staff__ "$RESULTS/staff-events.jsonl" > /dev/null 2>&1 & echo $! > "$ROOT/integration/staff.pid")
+sleep 4
 SCENARIOS=$(node -e "console.log(Object.keys(require('$ROOT/integration/bot/scenarios.js').scenarios).join(' '))")
 if [ -z "$SCENARIOS" ]; then
   echo '::error title=Harness::could not enumerate scenarios from scenarios.js'
@@ -73,6 +77,13 @@ if [ "${RUN_LATENCY_PASS:-0}" = "1" ] && sudo -n true 2>/dev/null; then
 fi
 
 echo "RCON tps: $(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci tps | tail -1)"
+echo "== stopping staff observer =="
+if [ -f "$ROOT/integration/staff.pid" ]; then
+  kill "$(cat "$ROOT/integration/staff.pid")" 2>/dev/null || true
+  sleep 1
+fi
+echo "staff observer lines: $(wc -l < "$RESULTS/staff-events.jsonl" 2>/dev/null || echo 0)"
+
 echo "== stopping server =="
 python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci stop > /dev/null 2>&1 || true
 for i in $(seq 1 30); do kill -0 "$(cat "$ROOT/integration/live.pid")" 2>/dev/null || break; sleep 2; done
