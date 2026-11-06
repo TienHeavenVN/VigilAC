@@ -208,9 +208,7 @@ jobs:
           set -euo pipefail
           mkdir -p server/plugins
           echo '== GET version metadata =='
-          curl -sS -w '
-HTTP %{http_code}
-' "https://api.papermc.io/v2/projects/paper/versions/1.21.8" -o meta.json
+          curl -sS -w 'HTTP %{http_code}\n' "https://api.papermc.io/v2/projects/paper/versions/1.21.8" -o meta.json && echo >> meta.json
           cat meta.json
           BUILD=$(jq -r '.builds[-1] // ""' meta.json)
           if [ -z "$BUILD" ]; then
@@ -220,9 +218,7 @@ HTTP %{http_code}
           echo "Using Paper 1.21.8 build $BUILD"
           URL="https://api.papermc.io/v2/projects/paper/versions/1.21.8/builds/${BUILD}/downloads/paper-1.21.8-${BUILD}.jar"
           echo "GET $URL"
-          curl -sSL -w '
-HTTP %{http_code}
-' -o server/paper.jar "$URL"
+          curl -sSL -w 'HTTP %{http_code}\n' -o server/paper.jar "$URL"
           ls -la server/paper.jar
           SIZE=$(stat -c%s server/paper.jar)
           echo "downloaded $SIZE bytes"
