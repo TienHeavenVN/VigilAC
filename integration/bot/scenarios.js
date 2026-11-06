@@ -143,10 +143,10 @@ define('legit-teleport', { kind: 'legit', description: 'server-side upward tp (g
 
 define('illegal-timer', { kind: 'illegal', description: 'movement packets at 30/s for 5s', expect: ['timer'] }, async (bot, api) => {
   bot.physicsEnabled = false;
-  const end = Date.now() + 5000;
-  for (let i = 0; i < 150; i++) {
+  const end = Date.now() + 6000;
+  for (let i = 0; i < 240; i++) {
     forgeMove(bot, 0.05, 0, 0, false);
-    await api.sleep(33);
+    await api.sleep(25); // ~40 packets/s sustained — clearly over the 21.5/s gate
     if (Date.now() > end) break;
   }
   api.result.evidence.push('sent ~30 movement packets/s for 5s');

@@ -41,8 +41,9 @@ manifest = []
 for f in sorted(glob.glob(os.path.join(VDIR, '*.json'))):
     with open(f) as fh:
         d = json.load(fh)
-    if d.get('scenario') == 'manifest':
-        continue
+    sc = d.get('scenario')
+    if not sc:
+        continue  # helper artifacts (debug-by-scenario.json etc.)
     entry = dict(d)
     vl = parse_vl(d.get('vlText', '') or '')
     entry['vl'] = vl
