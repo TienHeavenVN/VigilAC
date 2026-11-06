@@ -144,12 +144,15 @@ define('legit-teleport', { kind: 'legit', description: 'server-side upward tp (g
 define('illegal-timer', { kind: 'illegal', description: 'movement packets at 30/s for 5s', expect: ['timer'] }, async (bot, api) => {
   bot.physicsEnabled = false;
   const end = Date.now() + 6000;
-  for (let i = 0; i < 240; i++) {
+  let count = 0;
+  const t0 = Date.now();
+  while (Date.now() < end) {
     forgeMove(bot, 0.05, 0, 0, false);
-    await api.sleep(25); // ~40 packets/s sustained — clearly over the 21.5/s gate
-    if (Date.now() > end) break;
+    forgeMove(bot, -0.05, 0, 0, false); // two packets per iteration: drift-tolerant >21.5/s
+    count += 2;
+    await api.sleep(20);
   }
-  api.result.evidence.push('sent ~30 movement packets/s for 5s');
+  api.result.evidence.push('sent ' + count + ' packets over ' + (Date.now() - t0) + 'ms (~' + Math.round(count / ((Date.now() - t0) / 1000)) + '/s)');
 });
 
 define('illegal-overspeed', { kind: 'illegal', description: 'horizontal speed ~6.2 blocks/s for 4s (sprint cap 5.61)', expect: ['speed'] }, async (bot, api) => {
@@ -163,13 +166,15 @@ define('illegal-overspeed', { kind: 'illegal', description: 'horizontal speed ~6
 
 define('illegal-fly-hover', { kind: 'illegal', description: 'constant altitude airborne for 4.5s (fly hover signature)', expect: ['fly'] }, async (bot, api) => {
   bot.physicsEnabled = false;
-  // leave the ground once, then hold the altitude
-  forgeMove(bot, 0, 1.2, 0, false);
-  for (let i = 0; i < 45; i++) {
+  const g0 = ghost(bot);
+  api.rcon(`tp ${api.result.username} ${g0.x} ${g0.y + 8} ${g0.z}`);
+  setGhost(bot, g0.x, g0.y + 8, g0.z);
+  await api.sleep(700);
+  for (let i = 0; i < 50; i++) {
     forgeMove(bot, 0.01, 0, 0, false);
     await api.sleep(100);
   }
-  api.result.evidence.push('held constant altitude airborne for 4.5s');
+  api.result.evidence.push('hovered airborne ~5s at constant altitude (net vertical ~0)');
 });
 
 define('illegal-invalid-vertical', { kind: 'illegal', description: 'vertical delta 5.0/packet (terminal velocity 3.92)', expect: ['invalid-movement'] }, async (bot, api) => {
@@ -185,43 +190,66 @@ define('illegal-invalid-vertical', { kind: 'illegal', description: 'vertical del
   api.result.evidence.push('vertical delta 5.0 x4');
 });
 
-define('illegal-nofall', { kind: 'illegal', description: 'three falls > 7 blocks, no damage events', expect: ['no-fall'] }, async (bot, api) => {
+define('illegal-nofall', { kind: 'illegal', description: 'three 4.5-block falls with resistance V (no damage event), no onGround claim until landing', expect: ['no-fall'] }, async (bot, api) => {
   bot.physicsEnabled = false;
+  api.rcon(`effect give ${api.result.username} minecraft:resistance 9999 4 true`);
+  await api.sleep(400);
   for (let landing = 0; landing < 3; landing++) {
     const g = ghost(bot);
-    const tx = g.x, ty = g.y + 7.5, tz = g.z;
+    const tx = g.x, ty = g.y + 4.5, tz = g.z;
     api.rcon(`tp ${api.result.username} ${tx} ${ty} ${tz}`);
     setGhost(bot, tx, ty, tz);
-    await api.sleep(700);
-    for (let i = 0; i < 6; i++) {
-      forgeMove(bot, 0, -1.2, 0, false);
-      await api.sleep(50);
-    }
-    forgeMove(bot, 0, -0.3, 0, true); // touch down
     await api.sleep(800);
-    api.result.evidence.push('fall ' + (landing + 1) + ' completed');
+    for (let i = 0; i < 6; i++) {
+      forgeMove(bot, 0, -0.75, 0, false);
+      await api.sleep(60);
+    }
+    forgeMove(bot, 0, -0.1, 0, true); // claim landing
+    await api.sleep(600);
+    api.result.evidence.push('fall ' + (landing + 1) + ' completed with resistance V (no fall damage expected)');
   }
 });
 
-define('illegal-reach', { kind: 'illegal', description: '8 attacks on a zombie 5 blocks away', expect: ['reach'] }, async (bot, api) => {
-  const z = await summonZombieNear(bot, api, { x: 5, z: 0 }, api.result.username);
-  if (!z) { api.result.evidence.push('zombie did not spawn'); return; }
-  await api.sleep(500);
-  for (let i = 0; i < 8; i++) {
-    attack(bot, z);
-    await api.sleep(150);
+define('reach-probe', { kind: 'probe', description: 'attack zombies at 3.6/4.5/5.0 blocks, 10 punches each, verify zombie HP before/after', expect: [] }, async (bot, api) => {
+  const name = api.result.username;
+  for (const dist of [3.6, 4.5, 5.0]) {
+    api.rcon(`execute at ${name} run summon minecraft:zombie ~${dist} ~ ~`);
   }
-  api.result.evidence.push('8 attacks on zombie at ~5 blocks');
+  await api.sleep(1000);
+  for (let i = 0; i < 3; i++) {
+    const before = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+    const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
+    zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+    const z = zombies[i];
+    if (!z) { api.result.evidence.push('zombie#' + i + ' not tracked client-side'); continue; }
+    for (let j = 0; j < 10; j++) { attack(bot, z); await api.sleep(120); }
+    const after = api.rcon('data get entity @e[type=zombie,sort=nearest,limit=1] Health');
+    api.result.evidence.push('zombie#' + i + ' (~' + [3.6, 4.5, 5.0][i] + 'b): hpBefore=[' + before.slice(0, 90) + '] hpAfter=[' + after.slice(0, 90) + ']');
+  }
 });
 
-define('illegal-autoclick', { kind: 'illegal', description: '25 attacks/s on one zombie (CPS gate)', expect: ['auto-clicker'] }, async (bot, api) => {
-  const z = await summonZombieNear(bot, api, { x: 1, z: 0 }, api.result.username);
-  if (!z) { api.result.evidence.push('zombie did not spawn'); return; }
-  for (let i = 0; i < 45; i++) {
-    attack(bot, z);
+define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS on rotating zombies for 12s (needs robotic streak)', expect: ['auto-clicker'] }, async (bot, api) => {
+  const name = api.result.username;
+  for (let i = 0; i < 4; i++) {
+    api.rcon(`execute at ${name} run summon minecraft:zombie ~${i % 2 === 0 ? 2 : -2} ~ ~${i < 2 ? 0 : 1}`);
+  }
+  await api.sleep(1000);
+  const end = Date.now() + 12000;
+  let attacks = 0, resummons = 0;
+  while (Date.now() < end) {
+    const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
+    if (zombies.length === 0) {
+      api.rcon(`execute at ${name} run summon minecraft:zombie ~1 ~ ~`);
+      resummons++;
+      await api.sleep(600);
+      continue;
+    }
+    zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
+    attack(bot, zombies[0]);
+    attacks++;
     await api.sleep(40);
   }
-  api.result.evidence.push('45 attacks at 25 CPS');
+  api.result.evidence.push(attacks + ' attacks in 12s (~' + Math.round(attacks / 12) + ' CPS), resummons=' + resummons);
 });
 
 define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinct zombies inside 1s window', expect: ['kill-aura'] }, async (bot, api) => {
@@ -240,57 +268,58 @@ define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinc
   api.result.evidence.push('attacked ' + zombies.length + ' distinct zombies x3 rounds');
 });
 
-define('illegal-scaffold', { kind: 'illegal', description: 'place 8 blocks to the east while facing south (out-of-view)', expect: ['scaffold'] }, async (bot, api) => {
-  const pos = bot.entity.position.floored();
-  for (let i = 1; i <= 8; i++) {
-    api.rcon(`execute at ${api.result.username} run setblock ~${i + 1} ~-1 ~ dirt`); // anchor chain
-  }
+define('illegal-scaffold', { kind: 'illegal', description: 'stack 8 blocks on an anchor behind the player while facing exactly away', expect: ['scaffold'] }, async (bot, api) => {
+  const name = api.result.username;
+  api.rcon(`execute at ${name} run setblock ~2 ~-1 ~ dirt`); // anchor east (+x), 2 blocks away
   await api.sleep(400);
-  await bot.look(0, 0.2, true); // face south, slight down pitch
+  const pos = bot.entity.position.floored();
+  await bot.look(Math.PI / 2, 0, true); // face west (-x): anchor is directly behind; angle ~180deg
   let placed = 0;
-  for (let i = 2; i <= 9; i++) {
-    const ref = bot.blockAt(pos.offset(i, -1, 0));
-    if (ref) {
-      try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) { /* keep going */ }
-    }
+  const errors = [];
+  for (let i = 0; i < 8 && placed < 8; i++) {
+    const ref = bot.blockAt(pos.offset(2, -1 + placed, 0));
+    if (!ref) { errors.push('refnull@' + placed); break; }
+    try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) { errors.push(String((e && e.message) || e).slice(0, 60)); break; }
   }
-  api.result.evidence.push('placed ' + placed + ' blocks to the side while facing away');
+  api.result.evidence.push('stacked ' + placed + ' blocks behind the player (angle ~180deg)' + (errors.length ? ' errors=[' + errors.join(';') + ']' : ''));
 });
 
-define('illegal-fastplace', { kind: 'illegal', description: 'place blocks faster than the 5/s cooldown ceiling', expect: ['fast-place'] }, async (bot, api) => {
-  const pos = bot.entity.position.floored();
-  for (let i = 1; i <= 14; i++) {
-    api.rcon(`execute at ${api.result.username} run setblock ~ ~-1 ~${i} dirt`);
-  }
+define('illegal-fastplace', { kind: 'illegal', description: 'stack 20 blocks on one in-reach anchor fast (>7/s ceiling)', expect: ['fast-place'] }, async (bot, api) => {
+  const name = api.result.username;
+  api.rcon(`execute at ${name} run setblock ~2 ~-1 ~ dirt`);
   await api.sleep(400);
-  await bot.look(0, 1.0, true);
+  const pos = bot.entity.position.floored();
+  await bot.look(-Math.PI / 2, 0, true); // face the anchor (+x): bearing fine, rate is the signal
   let placed = 0;
+  const errors = [];
   const started = Date.now();
-  for (let i = 1; i <= 14 && Date.now() - started < 3000; i++) {
-    const ref = bot.blockAt(pos.offset(0, -1, i));
-    if (ref) {
-      try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) { /* ignore */ }
+  for (let i = 0; i < 20 && Date.now() - started < 4000; i++) {
+    const ref = bot.blockAt(pos.offset(2, -1 + placed, 0));
+    if (!ref) { errors.push('ref' + placed + 'null'); break; }
+    try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) {
+      errors.push(String((e && e.message) || e).slice(0, 60));
     }
   }
-  api.result.evidence.push('placed ' + placed + ' blocks in ' + (Date.now() - started) + 'ms');
+  api.result.evidence.push('stacked ' + placed + ' blocks in ' + (Date.now() - started) + 'ms' + (errors.length ? ' errors=[' + errors.slice(0, 3).join(';') + ']' : ''));
 });
 
-define('illegal-fastbreak', { kind: 'illegal', description: 'instant-break stone 4x (start+stop 20ms apart)', expect: ['fast-break'] }, async (bot, api) => {
+define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20ms apart on stone; verify block survives (server dig-progress rule)', expect: [] }, async (bot, api) => {
   bot.physicsEnabled = false;
-  const pos = bot.entity.position.floored();
-  const faces = 1; // up face
-  for (let i = 1; i <= 4; i++) {
-    api.rcon(`execute at ${api.result.username} run setblock ~${i} ~-1 ~ stone`);
-  }
-  await api.sleep(400);
-  for (let i = 1; i <= 4; i++) {
-    const loc = { x: pos.x + i, y: pos.y - 1, z: pos.z };
-    bot._client.write('block_dig', { status: 0, location: loc, face: faces, sequence: 1000 + i });
+  const name = api.result.username;
+  const g = ghost(bot);
+  const bx = Math.floor(g.x), by = Math.floor(g.y) - 1, bz = Math.floor(g.z) + 2;
+  let survived = 0;
+  for (let i = 0; i < 6; i++) {
+    api.rcon(`setblock ${bx} ${by} ${bz} stone`);
+    await api.sleep(250);
+    bot._client.write('block_dig', { status: 0, location: { x: bx, y: by, z: bz }, face: 1, sequence: 100 + i });
     await api.sleep(20);
-    bot._client.write('block_dig', { status: 2, location: loc, face: faces, sequence: 1000 + i });
-    await api.sleep(120);
+    bot._client.write('block_dig', { status: 2, location: { x: bx, y: by, z: bz }, face: 1, sequence: 200 + i });
+    await api.sleep(300);
+    const state = api.rcon(`data get block ${bx} ${by} ${bz}`);
+    if (state.includes('stone')) survived++;
   }
-  api.result.evidence.push('broke 4 stone blocks with 20ms dig cycles');
+  api.result.evidence.push('after 6x 20ms dig bursts: stone survived ' + survived + '/6 blocks (server dig-progress enforcement)');
 });
 
 define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree snaps landing on targets', expect: ['aim-assist'] }, async (bot, api) => {

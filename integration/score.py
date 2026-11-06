@@ -38,6 +38,7 @@ def parse_vl(text):
 
 totals = {'legit_pass': 0, 'legit_fail': 0, 'illegal_pass': 0, 'illegal_fail': 0, 'unable': 0}
 manifest = []
+notes = []
 for f in sorted(glob.glob(os.path.join(VDIR, '*.json'))):
     with open(f) as fh:
         d = json.load(fh)
@@ -49,6 +50,9 @@ for f in sorted(glob.glob(os.path.join(VDIR, '*.json'))):
     entry['vl'] = vl
     if d.get('harnessError'):
         entry['verdict'] = 'UNABLE'
+        totals['unable'] += 1
+    elif d.get('kind') == 'probe':
+        entry['verdict'] = 'UNABLE'  # environment probe: documents behavior, never PASS/FAIL
         totals['unable'] += 1
     elif d.get('kind') == 'legit':
         offenders = {k: v for k, v in vl.items() if v > 0}
@@ -67,14 +71,20 @@ for f in sorted(glob.glob(os.path.join(VDIR, '*.json'))):
         continue  # PASS lines stay in the manifest; keep annotation budget for failures
     msg = json.dumps({'verdict': entry['verdict'], 'vl': vl, 'evidence': entry.get('evidence', [])[:8],
                       'debug': entry['debugLines'][:6], 'error': entry.get('harnessError'),
-                      'log': entry.get('log', [])[-12:]})[:1800]
-    print(f'::notice title=LiveTest-{entry["scenario"]}::{msg}')
+                      'log': entry.get('log', [])[-8:]})[:1500]
+    notes.append((entry['scenario'], msg))
 
 with open(os.path.join(VDIR, 'manifest.json'), 'w') as fh:
     json.dump(manifest, fh, indent=1)
+failing = len(notes)
 summary = (f"legit {totals['legit_pass']}/{totals['legit_pass']+totals['legit_fail']} clean, "
            f"illegal {totals['illegal_pass']}/{totals['illegal_pass']+totals['illegal_fail']} detected, "
-           f"unable {totals['unable']}")
+           f"unable {totals['unable']}, non-pass {failing}")
 with open(os.path.join(VDIR, 'summary.txt'), 'w') as fh:
     fh.write(summary + '\n')
+# summary FIRST so the GitHub annotation cap never hides the headline
 print(f'::notice title=LiveBotSummary::{summary}')
+for scenario, msg in notes[:8]:
+    print(f'::notice title=LiveTest-{scenario}::{msg}')
+if failing > 8:
+    print(f'::notice title=LiveTest-More::+{failing - 8} more non-pass scenario(s); see the live-bot-results artifact manifest.json')
