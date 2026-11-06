@@ -119,10 +119,12 @@ with open(log_path, errors='replace') as fh:
         m = re.search(r'\[VigilAC debug\] \[([a-z-]+)\] ([A-Za-z0-9_]+): (.{0,180})', line)
         if m:
             check, player, detail = m.group(1), m.group(2), m.group(3)
-            by_sc[names.get(player, '?')].append(f'[{check}] {player}: {detail}'[:180])
-            counts[check] += 1
-digest = ','.join(f'{k}:{v}' for k, v in counts.most_common(14))
-print('::notice title=DebugDigest::' + (digest if digest else 'NO vigilac debug lines found in server.log'))
+            sc = names.get(player, '?')
+            by_sc[sc].append(f'[{check}] {detail}'[:150])
+            counts[(sc, check)] += 1
+parts = [f'{sc}:{chk}={n}' for (sc, chk), n in counts.most_common(40)]
+digest = ' '.join(parts)
+print('::notice title=DebugDigest::' + (digest[:1300] if digest else 'NO vigilac debug lines found in server.log'))
 with open(os.path.join(vdir, 'debug-by-scenario.json'), 'w') as out:
     json.dump(by_sc, out)
 PY

@@ -82,8 +82,10 @@ summary = (f"legit {totals['legit_pass']}/{totals['legit_pass']+totals['legit_fa
            f"unable {totals['unable']}, non-pass {failing}")
 with open(os.path.join(VDIR, 'summary.txt'), 'w') as fh:
     fh.write(summary + '\n')
-# summary FIRST so the GitHub annotation cap never hides the headline
+# summary FIRST so the GitHub annotation cap never hides the headline;
+# legit FAILs (false positives — the most valuable findings) are printed first
 print(f'::notice title=LiveBotSummary::{summary}')
+notes.sort(key=lambda item: (0 if item[0].startswith('legit-') else 1))
 for scenario, msg in notes[:8]:
     print(f'::notice title=LiveTest-{scenario}::{msg}')
 if failing > 8:
