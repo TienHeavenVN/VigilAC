@@ -1,0 +1,40 @@
+name: VigilAC
+version: '${version}'
+main: ac.vigil.VigilAC
+description: Production-oriented anti-cheat for Paper servers
+author: VigilAC
+website: https://github.com/TienHeavenVN/VigilAC
+api-version: '1.21'
+load: POSTWORLD
+softdepend:
+  - packetevents
+commands:
+  vigilac:
+    description: VigilAC administration command
+    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|help>
+    permission: vigilac.command
+permissions:
+  vigilac.command:
+    description: Entry permission for /vigilac
+    default: op
+  vigilac.info:
+    description: View plugin info, TPS, check list and storage status
+    default: op
+  vigilac.alerts:
+    description: Receive VigilAC alerts (and toggle them with /vigilac alerts)
+    default: op
+  vigilac.check:
+    description: View per-player violation levels
+    default: op
+  vigilac.violations:
+    description: View violation overviews
+    default: op
+  vigilac.debug:
+    description: Toggle per-player detection debug output
+    default: op
+  vigilac.reload:
+    description: Reload config.yml
+    default: op
+  vigilac.exempt:
+    description: Toggle exemptions for players; players with this permission bypass all checks
+    default: op

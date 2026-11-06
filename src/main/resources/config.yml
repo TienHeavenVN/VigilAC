@@ -1,0 +1,83 @@
+# ============================================================================
+# VigilAC configuration
+# ============================================================================
+
+# mode: alert-only | punish
+#   alert-only (DEFAULT): staff are alerted, nothing else happens.
+#   punish:               kicks are executed at the per-check kick-vl threshold.
+# Only switch to "punish" after you have tuned thresholds for your server.
+mode: alert-only
+
+checks:
+  speed:
+    enabled: true
+    # Violation-level policy. VL accumulates and decays over time
+    # (see violations.decay-per-second); alerts fire at alert-vl,
+    # warnings at warn-vl, kicks at kick-vl (only in punish mode).
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 20.0
+    max-vl: 25.0
+    # Detection tuning.
+    # Vanilla top speeds are 4.317 (walk) and 5.612 (sprint) blocks/sec.
+    walk-cap: 4.4
+    sprint-cap: 5.8
+    # Each ACTIVE Speed potion level raises the cap by 20% (multiplied).
+    speed-potion-bonus: 0.2
+    # Cap multiplier while standing/running on ice or slime family blocks.
+    slippery-multiplier: 1.6
+    # VL added per SECOND of sustained movement above the cap, scaled by overflow.
+    excess-vl-per-second: 2.0
+    # The check ignores everything until the excess has persisted for this many
+    # seconds. Bursts shorter than this produce zero VL.
+    min-sustain-seconds: 1.2
+  reach:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 15.0
+    max-vl: 20.0
+    # Vanilla melee reach is 3.0 blocks (eye -> target bounding box).
+    max-reach: 3.0
+    # Floating-point tolerance only; NOT a latency allowance.
+    tolerance: 0.03
+    # Multi-observation gate: consecutive over-reach attacks required before VL is added.
+    min-attacks-over: 4
+    # VL added per qualifying over-reach attack (scales with excess distance).
+    vl-per-attack-over: 1.0
+    # Samples used for the windowed (linearly weighted) reach average.
+    ema-samples: 6
+
+violations:
+  # How much VL decays per second once the decay delay has elapsed.
+  decay-per-second: 1.0
+  # Seconds after the last violation before decay starts.
+  decay-delay-seconds: 5.0
+
+storage:
+  # Persist every ALERT-or-higher violation to SQLite asynchronously.
+  enabled: true
+  file: vigilac-violations.db
+
+punishments:
+  kick-message: '&cKicked by VigilAC (reason: %check%)'
+  warn-message: '&e[VigilAC] Warning: unusual %check% activity detected. Please stop.'
+  # Console commands run when a player crosses warn-vl / kick-vl.
+  # %player% and %check% are substituted. Empty by default — no punishments run
+  # until you configure them.
+  commands-on-warn: []
+  commands-on-kick: []
+
+confounders:
+  # A single event moving farther than this is treated as a teleport.
+  teleport-threshold: 8.0
+  # Grace after teleports (seconds).
+  teleport-grace-seconds: 2.0
+  # Base grace after velocity/knockback events (milliseconds); scales up to 2s with impulse strength.
+  velocity-grace-millis: 800
+
+# Global debug output to players with the vigilac.debug permission (verbose).
+debug: false
+
+# Permission that bypasses ALL checks for a player.
+exempt-permission: vigilac.exempt
