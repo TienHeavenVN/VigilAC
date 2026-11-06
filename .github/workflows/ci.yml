@@ -265,12 +265,30 @@ jobs:
 
       - name: "RCON: plugins, vigilac info, vigilac violations"
         run: |
-          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci plugins > rcon-plugins.txt
+          run_rcon () {
+            local out="$1"; shift
+            local err
+            err=$(mktemp)
+            python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci "$@" > "$out" 2> "$err"
+            local rc=$?
+            if [ $rc -ne 0 ]; then
+              {
+                printf '::error title=Rcon-%s::rc=%s stderr: ' "$out" "$rc"
+                head -c 400 "$err" | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g'
+                echo
+              }
+              cat "$err"
+              exit 1
+            fi
+          }
+          run_rcon rcon-plugins.txt plugins || exit 1
           cat rcon-plugins.txt
           grep -qi vigilac rcon-plugins.txt || { echo "::error title=RconPlugins::VigilAC missing from /plugins output"; exit 1; }
-          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci vigilac info | tee rcon-info.txt
+          run_rcon rcon-info.txt vigilac info || exit 1
+          cat rcon-info.txt
           grep -qi 'VigilAC' rcon-info.txt || { echo "::error title=RconInfo::/vigilac info did not report VigilAC"; exit 1; }
-          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci vigilac violations > /dev/null
+          run_rcon rcon-violations.txt vigilac violations || exit 1
+          cat rcon-violations.txt
 
       - name: Stop server and verify clean shutdown + SQLite file
         run: |

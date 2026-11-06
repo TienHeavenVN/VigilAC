@@ -45,7 +45,12 @@ def main() -> int:
     host, port, password = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     command = " ".join(sys.argv[4:])
 
-    sock = socket.create_connection((host, port), timeout=10)
+    try:
+        sock = socket.create_connection((host, port), timeout=10)
+        sock.settimeout(10)
+    except OSError as exc:
+        print(f"cannot connect to {host}:{port}: {exc}", file=sys.stderr)
+        return 4
     try:
         send_packet(sock, 1, REQUEST_LOGIN, password)
         request_id, _, _ = read_packet(sock)
@@ -66,6 +71,12 @@ def main() -> int:
         sys.stdout.write("".join(chunks))
         sys.stdout.flush()
         return 0
+    except (socket.timeout, TimeoutError):
+        print("timed out waiting for server response", file=sys.stderr)
+        return 5
+    except (EOFError, OSError) as exc:
+        print(f"connection lost: {exc}", file=sys.stderr)
+        return 6
     finally:
         sock.close()
 
