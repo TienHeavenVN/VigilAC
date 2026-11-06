@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches:
+      - main
+      - 'arena/**'
   pull_request:
-    branches: ["**"]
 
 jobs:
   build:
@@ -18,19 +19,26 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: '21'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build (compile, unit tests, shadow JAR)
-        run: |
-          chmod +x ./gradlew
-          ./gradlew build --no-daemon --stacktrace
+      - name: Compile main sources
+        run: ./gradlew compileJava --no-daemon --stacktrace
+
+      - name: Compile test sources
+        run: ./gradlew compileTestJava --no-daemon --stacktrace
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Build shadow JAR
+        run: ./gradlew shadowJar --no-daemon --stacktrace
 
       - name: Upload VigilAC.jar
         uses: actions/upload-artifact@v4
         with:
-          name: VigilAC.jar
+          name: VigilAC
           path: build/libs/VigilAC.jar
-          retention-days: 14
+          if-no-files-found: error

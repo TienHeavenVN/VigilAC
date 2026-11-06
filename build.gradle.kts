@@ -14,7 +14,7 @@ java {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
-    compileOnly("io.github.retrooper:packetevents-spigot:2.11.2")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.11.2")
     implementation("org.xerial:sqlite-jdbc:3.46.1.3")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
