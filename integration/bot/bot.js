@@ -35,7 +35,7 @@ const rcon = (command) => {
 /** Staff observer: op'd idle bot that captures every [VigilAC debug] chat line. */
 if (scenarioId === '__staff__') {
   const bot = mineflayer.createBot({
-    host: '127.0.0.1', port, username, version: '1.21.8', auth: 'offline', viewDistance: 'small',
+    host: '127.0.0.1', port, username, version: '1.21.8', auth: 'offline', viewDistance: 'tiny',
   });
   const stream = fs.createWriteStream(outPath, { flags: 'a' });
   bot.once('spawn', () => {
@@ -77,7 +77,7 @@ const bot = mineflayer.createBot({
   username,
   version: '1.21.8',
   auth: 'offline',
-  viewDistance: 'small',
+  viewDistance: 'tiny',
 });
 
 const tlog = (m) => {
