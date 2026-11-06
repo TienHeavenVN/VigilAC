@@ -77,6 +77,11 @@ bot.on('error', (err) => tlog('ERROR ' + String(err).slice(0, 200)));
 bot.once('spawn', async () => {
   tlog('SPAWNED');
   try {
+    // Anchor the bot onto the flat deterministic pad; the vanilla world spawn
+    // has buried bots inside mesa cliffs in CI (terrain is random each boot).
+    // The 2s teleport grace expires inside the sleep below.
+    rcon(`tp ${username} 0 64 0`);
+    await sleep(2300);
     // NOTE: the scenario bot is deliberately NOT op'd. Our permission defaults
     // grant vigilac.exempt to ops, which would silently exempt the bot from all
     // checks. The RCON console (full permissions) runs /vigilac debug and
