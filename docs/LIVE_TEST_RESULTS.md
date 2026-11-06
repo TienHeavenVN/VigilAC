@@ -1,6 +1,6 @@
 # VigilAC live-test results (Phase 3)
 
-**Date:** 2026-11-06 · **Branch:** `arena/9ae3a67f-vigilac` · **Reference run:** [CI `42255620165`](https://github.com/TienHeavenVN/VigilAC/actions/runs/42255620165) (HEAD `65a64a4`; build + 12-version compat + smoke + both live legs SUCCESS) · **Server:** Paper 1.21.8 STABLE (Fill v3, pinned build, sha256 verified in `integration/paper.sh`) on Java 21 · **Plugin:** VigilAC as built from the branch (`shadowJar`), alert-only mode (default; no punishment commands configured) · **Client:** custom headless protocol bot (mineflayer 1.21.8, offline mode) driven by `integration/bot/scenarios.js` · **Matrix:** PacketEvents installed (`packetevents 1`, packetevents 2.14.0) **and** absent (`packetevents 0`); all scenarios run on both legs · **Latency pass:** all `legit-*` scenarios re-run under `tc netem` 120 ms ± 30 ms on loopback.
+**Date:** 2026-11-06 · **Branch:** `arena/9ae3a67f-vigilac` · **Reference run:** [CI `42259047477`](https://github.com/TienHeavenVN/VigilAC/actions/runs/42259047477) (HEAD `0cfa22c`; build + 12-version compat + smoke + both live legs SUCCESS) · **Server:** Paper 1.21.8 STABLE (Fill v3, pinned build, sha256 verified in `integration/paper.sh`) on Java 21 · **Plugin:** VigilAC as built from the branch (`shadowJar`), alert-only mode (default; no punishment commands configured) · **Client:** custom headless protocol bot (mineflayer 1.21.8, offline mode) driven by `integration/bot/scenarios.js` · **Matrix:** PacketEvents installed (`packetevents 1`, packetevents 2.14.0) **and** absent (`packetevents 0`); all scenarios run on both legs · **Latency pass:** all `legit-*` scenarios re-run under `tc netem` 120 ms ± 30 ms on loopback.
 
 > **Honesty note — read this first.** The in-house protocol bot is **not** Meteor, LiquidBounce or Wurst. It is a scripted packet driver for verifying detection paths. Real-client verification is listed separately below and is **UNABLE-TO-TEST**. Nothing in this document claims those clients were tested. Likewise, no detection rate against real-world adversaries is claimed; results here describe an isolated, deterministic lab environment.
 
@@ -33,7 +33,7 @@ No results, timings or detections are recorded for these clients anywhere in thi
 
 ## 4. Verdicts per check (12 checks)
 
-Reference run for this document: `42255620165` (leg 0 = PacketEvents absent, leg 1 = PacketEvents installed 2.14.0). All verdicts below are the CI-scored outcomes on both legs; earlier runs (e.g. `42237531836`, `42250442169`, `42252187624`) track the harness-hardening iterations that led here.
+Reference run for this document: `42259047477` (leg 0 = PacketEvents absent, leg 1 = PacketEvents installed 2.14.0). All verdicts below are the CI-scored outcomes on both legs; earlier runs (e.g. `42237531836`, `42250442169`, `42252187624`, `42255620165`, `42257326776`) track the harness-hardening iterations that led here. Note: `42257326776` leg 1 died at the pad-forceload step when the fresh-world `forceload` response exceeded the RCON first-byte deadline (empty output → loud abort); fixed in `0cfa22c` (10 s deadline) and re-verified green.
 
 | # | Check | Detection evidence | Verdict |
 |---|---|---|---|
@@ -67,12 +67,12 @@ Legend: **Tested — detects** = behavior produced the check's evidence with cor
 - **`spawn-monsters=false` suppresses `/summon` of monster entities too** — combat scenarios saw zero zombies on two consecutive runs. Natural spawns are blocked via gamerule `doMobSpawning false` instead (summons unaffected); verified in the reference run.
 - **fresh-world chunks**: console `fill` fails with "That position is not loaded" on unloaded coordinates — the pad force-loads the region first (`forceload add`), and accepts "No blocks were filled" as a success response for no-op fills (flat seeds).
 
-## 6. Reference run (42255620165) — per-leg summary
+## 6. Reference run (42259047477) — per-leg summary
 
 | Leg | PacketEvents | legit clean | illegal detected | unable | notes |
 |---|---|---|---|---|---|
-| 0 | absent | 15/16 (sprint-jump speed VL 3.83) | **5/10**: timer (VL 6.17), fly, invalid-vertical, **reach**, **kill-aura** (5 callbacks each; attacks verified landing — "Monster Hunter") | 2 (nofall, fast-break) | detection count improved from 0/11 → 5/10 across the harness-hardening iterations |
-| 1 | installed (2.14.0) | 15/16 (sprint-jump speed VL 3.72) | **4/10**: timer (VL 6.53), fly, invalid-vertical, **kill-aura** (7 callbacks) | 2 | illegal-reach fired 1 callback on the kill-aura scenario |
+| 0 | absent | 15/16 (sprint-jump speed VL 3.47) | **5/10**: timer (VL 6.28), fly, invalid-vertical, **reach** (4 callbacks), **kill-aura** (4 callbacks) | 2 (nofall, fast-break) | detection count improved from 0/11 → 5/10 across the harness-hardening iterations |
+| 1 | installed (2.14.0) | 15/16 (sprint-jump speed VL 4.05) | **5/10**: timer (VL 6.53), fly, invalid-vertical, **overspeed** (11 callbacks), **reach** (4 callbacks), **kill-aura** (2 callbacks) | 2 | timer reproducible on both legs in every run since introduction (6.16-6.65 VL) |
 
 Both legs: pad anchor confirmed in every scenario log (`RCON pos -> ... 64.0d ...`), `tps=20.0` in all debug lines, zero VigilAC exception/severe lines, default alert-only mode held, zero players punished.
 
@@ -80,7 +80,7 @@ Both legs: pad anchor confirmed in every scenario log (`RCON pos -> ... 64.0d ..
 
 | # | Check | Status | Evidence |
 |---|---|---|---|
-| 1 | `speed` | **Detects** (illegal-overspeed fires the check; verdict FAIL only because VL decays to 0.0 before the end-of-scenario read) | `[speed] ema≈6.5 cap=4.4 sustained=1.2s` lines every run; legit sprint-jump residual VL 3.7-3.8 (< alert 5.0) |
+| 1 | `speed` | **Detects** (illegal-overspeed fires the check; verdict FAIL only because VL decays to 0.0 before the end-of-scenario read) | `[speed] ema≈6.5 cap=4.4 sustained=1.2s` lines every run; legit sprint-jump residual VL 3.47-4.05 (< alert 5.0) |
 | 2 | `timer` | **Detects** | VL 6.17 / 6.53 on both legs (raw + event rate paths) |
 | 3 | `fly` | **Detects** | fly observations on both legs (3-4 per leg) |
 | 4 | `no-fall` | **Unable to test** | see above — vanilla-indistinguishable from Resistance-V landings |
@@ -141,8 +141,8 @@ Both legs: pad anchor confirmed in every scenario log (`RCON pos -> ... 64.0d ..
 | Legit: temporary TPS degradation | **NOT TESTED** — no low-TPS injection in this phase | §6 |
 | Metrics: detection rate, FP rate, latency, VL progression, TPS, ping, packet evidence, reproducible cases | **Done** — VL snapshots per bot, debug digests, RawSample artifacts, TPS/ping in every debug line; sprint-jump FP root-caused and fixed via latency pass | §6 |
 | Confirmed bugs have regression tests | **Done** — `SpeedCheckTest#backlogBurstDoesNotFabricateSpeed`, `sustainedSprintCheatStillFlags`, `legitSprintJumpNeverFlags`, `MovementTrackerTest` (3) | §7 |
-| 86+ tests remain passing | **Done** — CI `Build and test` SUCCESS (92 tests) on every push | CI `42255620165` |
-| Paper integration green | **Done** — smoke job SUCCESS; 12-version compat SUCCESS | CI `42255620165` |
+| 86+ tests remain passing | **Done** — CI `Build and test` SUCCESS (92 tests) on every push | CI `42259047477` |
+| Paper integration green | **Done** — smoke job SUCCESS; 12-version compat SUCCESS | CI `42259047477` |
 | Default stays alert-only | **Done** | §2 |
 | No production-readiness claim without real-client evidence | **Done** — §1 | §1 |
 | Regression tests for confirmed bugs | **Done** (re-run per CI) | §7 |
