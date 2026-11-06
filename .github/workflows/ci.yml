@@ -7,6 +7,10 @@ on:
       - 'arena/**'
   pull_request:
 
+permissions:
+  checks: write
+  contents: read
+
 jobs:
   build:
     name: Build and test
@@ -41,6 +45,23 @@ jobs:
           path: build/test-results/test/*.xml
           reporter: java-junit
           fail-on-error: false
+
+      - name: Test failure details (annotations)
+        if: failure()
+        run: |
+          python3 - <<'PYEOF'
+          import glob, re, html, os
+          found = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              text = open(f, encoding='utf8', errors='replace').read()
+              for m in re.finditer(r'<(failure|error)[^>]*message="([^"]*)"', text):
+                  found += 1
+                  msg = html.unescape(m.group(2)).replace('\n', ' ').replace('\r', ' ')[:600]
+                  case = os.path.basename(f)[:-4]
+                  print(f'::error title={case}::{msg}')
+          if not found:
+              print('::error title=NoTestFailures::Test step failed but no failure tags were found in the XML reports')
+          PYEOF
 
       - name: Build shadow JAR
         run: ./gradlew shadowJar --no-daemon --stacktrace
