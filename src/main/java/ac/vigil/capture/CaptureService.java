@@ -60,7 +60,7 @@ public final class CaptureService {
     private CaptureBuffer buffer;
     private final ConcurrentHashMap<UUID, String> sessionPseudonyms = new ConcurrentHashMap<>();
 
-    private static final java.util.regex.Pattern MC_VERSION = java.util.regex.Pattern.compile("(\d+\.\d+(\.\d+)?)");
+    private static final java.util.regex.Pattern MC_VERSION = java.util.regex.Pattern.compile("([0-9]+[.][0-9]+([.][0-9]+)?)");
 
     private volatile boolean started;
     private volatile String mcVersion;
@@ -90,7 +90,7 @@ public final class CaptureService {
         String mc = normalizeMcVersion(safeVersion());
         if (mc == null) {
             problems = new java.util.ArrayList<>(problems);
-            problems.add("Minecraft version could not be determined as \d+.\d+(.\d+)? from the server (got: "
+            problems.add("Minecraft version could not be determined as an X.Y[.Z] number from the server (got: "
                     + safeVersion() + ") — refusing to write rows the Stage 3 pipeline would reject");
         }
         if (!problems.isEmpty()) {
