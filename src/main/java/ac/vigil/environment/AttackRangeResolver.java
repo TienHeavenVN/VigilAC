@@ -59,7 +59,7 @@ public final class AttackRangeResolver {
         }
     }
 
-    private static volatile boolean warned;
+    private static final java.util.concurrent.atomic.AtomicBoolean warned = new java.util.concurrent.atomic.AtomicBoolean();
 
     /** Resolves the item's max interaction range, or UNKNOWN. Never throws. */
     public static Result resolve(ItemStack hand) {
@@ -78,8 +78,7 @@ public final class AttackRangeResolver {
             }
             return Result.unknown();
         } catch (Throwable throwable) {
-            if (!warned) {
-                warned = true;
+            if (warned.compareAndSet(false, true)) {
                 try {
                     org.bukkit.Bukkit.getLogger().warning(
                             "[VigilAC] attack_range component read failed (reach falls back to configured cap; cause logged once): "
