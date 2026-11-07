@@ -95,6 +95,8 @@ public final class VigilAC extends JavaPlugin {
                 new ConfounderListener(playerDataManager, this::getVigilacConfig), this);
         getServer().getPluginManager().registerEvents(
                 new ac.vigil.listener.InventoryListener(playerDataManager), this);
+        getServer().getPluginManager().registerEvents(
+                new ac.vigil.listener.HeldItemListener(playerDataManager), this);
 
         this.packetEventsHandle = PacketEventsHook.tryRegister(this, playerDataManager);
 

@@ -34,5 +34,7 @@ public enum EvidenceType {
     /** A check recorded evidence (delta > 0 VL, or diagnostic evidence at vl == 0). */
     CHECK_EVIDENCE,
     /** Inventory click observation (view type in detail); context for inventory-related analysis. */
-    INVENTORY_CLICK
+    INVENTORY_CLICK,
+    /** Attack <em>attempt</em> observed at packet level (may be a miss / no damage). */
+    ATTACK_ATTEMPT
 }

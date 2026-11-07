@@ -19,6 +19,10 @@ public final class PlayerData {
     private final ac.vigil.data.tracking.MovementTracker movement = new ac.vigil.data.tracking.MovementTracker();
     private final ac.vigil.data.tracking.CombatTracker combat = new ac.vigil.data.tracking.CombatTracker();
     private final ac.vigil.data.tracking.BlockActionTracker blockActions = new ac.vigil.data.tracking.BlockActionTracker();
+    private final ac.vigil.data.tracking.AttackAttemptLedger attackAttempts = new ac.vigil.data.tracking.AttackAttemptLedger();
+    private final ac.vigil.data.tracking.SwingTracker swings = new ac.vigil.data.tracking.SwingTracker();
+    private final ac.vigil.data.tracking.RotationTracker rotations = new ac.vigil.data.tracking.RotationTracker();
+    private final ac.vigil.data.tracking.DiggingTracker digging = new ac.vigil.data.tracking.DiggingTracker();
     private volatile long lastDamageAt;
 
     /** VL per check name. */
@@ -247,6 +251,26 @@ public final class PlayerData {
 
     public ac.vigil.data.tracking.BlockActionTracker blockActionTracker() {
         return blockActions;
+    }
+
+    /** Attack attempts (misses included) seen on the packet path; empty without packetevents. */
+    public ac.vigil.data.tracking.AttackAttemptLedger attackAttemptLedger() {
+        return attackAttempts;
+    }
+
+    /** Arm swings (click cadence); empty without packetevents. */
+    public ac.vigil.data.tracking.SwingTracker swingTracker() {
+        return swings;
+    }
+
+    /** Rolling window of reported look direction from packets; empty without packetevents. */
+    public ac.vigil.data.tracking.RotationTracker rotationTracker() {
+        return rotations;
+    }
+
+    /** Server-side view of the client's block-digging lifecycle; empty without packetevents. */
+    public ac.vigil.data.tracking.DiggingTracker diggingTracker() {
+        return digging;
     }
 
     /** Access to the per-player continuous monitoring state (bounded; see PlayerMonitor). */

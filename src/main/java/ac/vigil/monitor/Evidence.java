@@ -11,6 +11,8 @@ public final class Evidence {
     public static final String SOURCE_SERVER = "server";
     public static final String SOURCE_CLIENT = "client";
     public static final String SOURCE_MONITOR = "monitor";
+    /** Packet-level observation via packetevents (off the main thread). */
+    public static final String SOURCE_PACKET = "packet";
 
     private final long timeMillis;
     private final EvidenceType type;

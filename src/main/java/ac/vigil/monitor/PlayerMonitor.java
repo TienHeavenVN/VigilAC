@@ -158,6 +158,12 @@ public final class PlayerMonitor {
         noteDamage(fall, clock.getAsLong());
     }
 
+    /** Records a packet-level attack attempt (miss or hit; detail carries target entity id). */
+    public synchronized void noteAttackAttempt(String detail) {
+        evidence.add(clock.getAsLong(), EvidenceType.ATTACK_ATTEMPT, 1.0D, Evidence.SOURCE_PACKET,
+                detail == null ? "" : detail);
+    }
+
     /** Records an EntityDamageEvent at an explicit timestamp (keeps tests deterministic). */
     public synchronized void noteDamage(boolean fall, long timestamp) {
         long now = timestamp;
