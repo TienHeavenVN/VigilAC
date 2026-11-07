@@ -26,9 +26,13 @@ public final class MovementTracker {
     private double netVerticalAirborne;  // signed accumulated dy while airborne
     private int upwardAirborneTicks;     // consecutive positive-dy ticks while airborne
     private double descentAirborne;      // accumulated downward distance while airborne
+    private int airborneTicks;           // total airborne observations since becoming airborne
     private int suspiciousLandingStreak; // consecutive landings with excessive fall + no damage
 
     private long timerExcessSince;       // 0 when within limits
+
+    private int waterSurfaceTicks;       // consecutive observations with dry feet above water
+    private int stepImpossibilityStreak; // consecutive observations with an impossible single-tick rise
 
     private final long[] moveRing = new long[MOVE_RING_SIZE];
     private int moveRingIndex;
@@ -46,6 +50,7 @@ public final class MovementTracker {
             netVerticalAirborne = 0.0D;
             upwardAirborneTicks = 0;
             descentAirborne = 0.0D;
+            airborneTicks = 0;
         }
     }
 
@@ -55,6 +60,7 @@ public final class MovementTracker {
             return;
         }
         netVerticalAirborne += dy;
+        airborneTicks++;
         if (dy > 0.0D) {
             upwardAirborneTicks++;
         } else if (dy < 0.0D) {
@@ -70,6 +76,7 @@ public final class MovementTracker {
         netVerticalAirborne = 0.0D;
         upwardAirborneTicks = 0;
         descentAirborne = 0.0D;
+        airborneTicks = 0;
         return result;
     }
 
@@ -97,6 +104,11 @@ public final class MovementTracker {
         return descentAirborne;
     }
 
+    /** Total airborne observations (move packets) since becoming airborne. */
+    public synchronized int getAirborneTicks() {
+        return airborneTicks;
+    }
+
     public synchronized int addSuspiciousLanding() {
         return ++suspiciousLandingStreak;
     }
@@ -119,6 +131,34 @@ public final class MovementTracker {
 
     public synchronized void resetTimerExcess() {
         timerExcessSince = 0L;
+    }
+
+    /** Records one dry-feet-over-water observation; returns the running consecutive count. */
+    public synchronized int noteWaterSurface() {
+        return ++waterSurfaceTicks;
+    }
+
+    /** Clears the water-surface streak (player sank, landed, or Frost Walker kicked in). */
+    public synchronized void resetWaterSurface() {
+        waterSurfaceTicks = 0;
+    }
+
+    public synchronized int getWaterSurfaceTicks() {
+        return waterSurfaceTicks;
+    }
+
+    /** Records one impossible single-tick rise; returns the running consecutive count. */
+    public synchronized int noteStepImpossibility() {
+        return ++stepImpossibilityStreak;
+    }
+
+    /** Clears the step-impossibility streak (a legal or ambiguous rise was observed). */
+    public synchronized void resetStepImpossibility() {
+        stepImpossibilityStreak = 0;
+    }
+
+    public synchronized int getStepImpossibilityStreak() {
+        return stepImpossibilityStreak;
     }
 
     public synchronized long getTimerExcessSince() {

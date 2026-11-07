@@ -10,8 +10,10 @@ import ac.vigil.check.combat.KillAuraCheck;
 import ac.vigil.check.combat.ReachCheck;
 import ac.vigil.check.movement.FlyCheck;
 import ac.vigil.check.movement.InvalidMovementCheck;
+import ac.vigil.check.movement.JesusCheck;
 import ac.vigil.check.movement.NoFallCheck;
 import ac.vigil.check.movement.SpeedCheck;
+import ac.vigil.check.movement.StepCheck;
 import ac.vigil.check.movement.TimerCheck;
 import ac.vigil.check.player.FastBreakCheck;
 import ac.vigil.check.player.FastPlaceCheck;
@@ -95,6 +97,8 @@ public final class VigilAC extends JavaPlugin {
                 new ConfounderListener(playerDataManager, this::getVigilacConfig), this);
         getServer().getPluginManager().registerEvents(
                 new ac.vigil.listener.InventoryListener(playerDataManager), this);
+        getServer().getPluginManager().registerEvents(
+                new ac.vigil.listener.HeldItemListener(playerDataManager), this);
 
         this.packetEventsHandle = PacketEventsHook.tryRegister(this, playerDataManager);
 
@@ -182,10 +186,18 @@ public final class VigilAC extends JavaPlugin {
                 cfg.noFallMinFallDistance(),
                 cfg.noFallDamageGraceMillis(),
                 cfg.noFallMinSuspiciousLandings(),
-                cfg.noFallVlPerLanding()));
+                cfg.noFallVlPerLanding(),
+                new ac.vigil.environment.BukkitBlockSupportProbe()));
         checkManager.register(new InvalidMovementCheck(
                 cfg.invalidMaxVerticalDelta(),
                 cfg.invalidVlPerImpossibility()));
+        checkManager.register(new JesusCheck(
+                cfg.jesusMinStreak(),
+                cfg.jesusVlPerTick()));
+        checkManager.register(new StepCheck(
+                cfg.stepMaxLegal(),
+                cfg.stepMinStreak(),
+                cfg.stepVlPerStep()));
         // Combat
         checkManager.register(new KillAuraCheck(
                 cfg.killAuraWindowMillis(),

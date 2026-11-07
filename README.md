@@ -33,7 +33,7 @@ intentionally not implemented.
 
 1. Download the artifact matching your server (build it yourself, see below, or from CI artifacts — each includes a `.sha256` checksum): `VigilAC.jar` for 1.21.x, `VigilAC-26x.jar` for 26.x.
 2. Put it in your server's `plugins/` directory.
-3. Restart the server; watch your console for `VigilAC enabled: 12 checks registered`.
+3. Restart the server; watch your console for `VigilAC enabled: 14 checks registered`.
 4. Edit `plugins/VigilAC/config.yml`. Start with defaults (`mode: alert-only`) and watch alerts for a few days.
 5. Optionally switch to `mode: punish` once thresholds are tuned for your server.
 
@@ -93,7 +93,7 @@ Algorithm details, thresholds and false-positive analysis: [docs/CHECKS.md](docs
 Listener (main thread, O(1)) ──► DetectionContext / AttackContext / PlaceContext / BreakContext
         │                          (immutable, server-agnostic)
         ▼
-CheckManager ──► 12 checks ──► ViolationCallback
+CheckManager ──► 14 checks ──► ViolationCallback
         ▼
 ViolationPipeline (exemptions, debug) ──► ViolationManager (VL, decay)
         ▼

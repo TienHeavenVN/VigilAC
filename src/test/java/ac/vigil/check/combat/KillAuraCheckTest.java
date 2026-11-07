@@ -41,14 +41,48 @@ class KillAuraCheckTest {
     }
 
     @Test
-    void distinctTargetsInWindowFlag() {
+    void threeDistinctTargetsWithMetronomicCadenceFlag() {
+        // Anchor (3 distinct damaged targets) + independent regularity signal
+        // (perfectly uniform 100 ms intervals) must flag.
         long now = 1_000_000L;
-        check.evaluate(attackAt("zombie-1", now), data, sink());
-        now += 300L;
-        check.evaluate(attackAt("skeleton-1", now), data, sink());
-        now += 300L;
-        check.evaluate(attackAt("creeper-1", now), data, sink());
-        assertFalse(flagged.isEmpty(), "three distinct entities inside 1s on cooldown-limited swings is aura evidence");
+        String[] targets = {"zombie-1", "skeleton-1", "creeper-1", "zombie-2", "skeleton-2", "creeper-2", "zombie-3"};
+        for (int i = 0; i < targets.length; i++) {
+            now += 100L;
+            data.combatTracker().recordAttack(now);
+            check.evaluate(attackAt(targets[i], now), data, sink());
+        }
+        assertFalse(flagged.isEmpty(), "anchor + metronomic cadence is aura evidence");
+    }
+
+    @Test
+    void threeDistinctTargetsWithoutCorroborationDoNotFlag() {
+        // Anchor alone must never flag: three distinct targets spread over a
+        // second with irregular human cadence is normal melee behaviour.
+        long now = 1_000_000L;
+        long[] spacing = {140L, 620L, 210L};
+        for (int i = 0; i < 3; i++) {
+            now += spacing[i];
+            data.combatTracker().recordAttack(now);
+            check.evaluate(attackAt("target-" + i, now), data, sink());
+        }
+        assertTrue(flagged.isEmpty(), "anchor alone (no regularity, no packet rate) must not flag");
+    }
+
+    @Test
+    void threeDistinctTargetsWithAttemptRateFlagEvenWithNoisyCadence() {
+        // Simulate packetevents: attempts at high rate corroborate the anchor
+        // even when the damage cadence itself is irregular.
+        long now = 1_000_000L;
+        String[] targets = {"a", "b", "c"};
+        for (int i = 0; i < targets.length; i++) {
+            now += 400L + (i * 137L) % 230L; // irregular
+            for (int j = 0; j < 4; j++) {
+                data.attackAttemptLedger().noteAttempt(now + j, 100 + i);
+            }
+            data.combatTracker().recordAttack(now);
+            check.evaluate(attackAt(targets[i], now), data, sink());
+        }
+        assertFalse(flagged.isEmpty(), "anchor + attack-attempt rate is aura evidence");
     }
 
     @Test

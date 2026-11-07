@@ -94,6 +94,29 @@ checks:
     # Above vanilla terminal velocity (3.92 blocks/tick at 78.4 m/s).
     max-vertical-delta: 4.25
     vl-per-impossibility: 4.0
+  jesus:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 20.0
+    max-vl: 25.0
+    # Consecutive dry-feet-above-water observations before VL accrues.
+    # 14 ticks = ~0.7 s of floating; a jump arc over water dips the feet
+    # into liquid between jumps and never reaches this streak.
+    min-streak: 14
+    vl-per-tick: 0.5
+  step:
+    enabled: true
+    alert-vl: 5.0
+    warn-vl: 10.0
+    kick-vl: 20.0
+    max-vl: 25.0
+    # Vanilla auto-step is 0.6 blocks/tick; 0.95 clears jitter and Jump Boost
+    # up to ~level IV. Higher Jump Boosts are documented in CHECKS.md.
+    max-legal-delta: 0.95
+    # Consecutive impossible rises required before VL accrues.
+    min-streak: 2
+    vl-per-step: 2.5
   kill-aura:
     enabled: true
     alert-vl: 5.0

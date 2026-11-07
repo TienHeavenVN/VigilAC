@@ -117,6 +117,12 @@ public final class SpeedCheck implements Check<DetectionContext> {
         if (ctx.isOnSlipperyBlock()) {
             cap *= slipperyMultiplier;
         }
+        if (ctx.isOnSlowBlock()) {
+            cap *= 0.4D; // soul sand / soul soil / honey / berry bush slow vanilla to 40%
+        }
+        if (ctx.isInWeb()) {
+            cap *= 0.35D; // cobweb drags horizontal motion to a crawl
+        }
 
         if (ema <= cap) {
             // Drain accumulated excess twice as fast as it can accumulate.

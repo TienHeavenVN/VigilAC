@@ -23,6 +23,11 @@ import ac.vigil.detection.DetectionContext;
  *         {@code hoverTolerance} blocks while airborne longer than
  *         {@code minHoverMillis}. Vanilla cannot produce zero-net-vertical
  *         flight without a status effect (Slow Falling is exempted).</li>
+ *     <li><b>Low-gradient sink</b>: continuous descent at under
+ *         {@code lowGradientMaxPerTick} blocks per airborne tick for at
+ *         least {@code lowGradientMinTicks} consecutive airborne observations
+ *         (vanilla fall acceleration makes sustained sub-0.04-b/tick descent
+ *         over 40+ ticks impossible outside Slow Falling, which is exempt).</li>
  *     <li><b>Rising flight</b>: {@code minUpwardTicks} consecutive positive
  *         vertical ticks with net upward displacement — impossible without a
  *         jump or the Levitation effect (both exempted; jumps never sustain
@@ -53,12 +58,21 @@ public final class FlyCheck implements Check<DetectionContext> {
     private final double hoverTolerance;
     private final int minUpwardTicks;
     private final double vlPerObservation;
+    private final double lowGradientMaxPerTick;
+    private final int lowGradientMinTicks;
 
     public FlyCheck(long minHoverMillis, double hoverTolerance, int minUpwardTicks, double vlPerObservation) {
+        this(minHoverMillis, hoverTolerance, minUpwardTicks, vlPerObservation, 0.04D, 40);
+    }
+
+    public FlyCheck(long minHoverMillis, double hoverTolerance, int minUpwardTicks, double vlPerObservation,
+                    double lowGradientMaxPerTick, int lowGradientMinTicks) {
         this.minHoverMillis = minHoverMillis;
         this.hoverTolerance = hoverTolerance;
         this.minUpwardTicks = minUpwardTicks;
         this.vlPerObservation = vlPerObservation;
+        this.lowGradientMaxPerTick = lowGradientMaxPerTick;
+        this.lowGradientMinTicks = lowGradientMinTicks;
     }
 
     @Override
@@ -78,6 +92,7 @@ public final class FlyCheck implements Check<DetectionContext> {
         if (ctx.isInVehicle() || ctx.isGliding() || ctx.isInLiquid()
                 || ctx.isTeleportGrace() || ctx.isKnockbackGrace()
                 || ctx.isLevitation() || ctx.isSlowFalling()
+                || ctx.isInWeb() // heavy drag mimics the low-gradient sink signature
                 || ctx.getServerTps() < MIN_TPS) {
             tracker.leaveAirborne(); // modifier active: reset evidence
             return;
@@ -100,20 +115,25 @@ public final class FlyCheck implements Check<DetectionContext> {
         double net = tracker.getNetVerticalAirborne();
         int upTicks = tracker.getUpwardAirborneTicks();
         double descent = tracker.getDescentAirborne();
+        int airTicks = tracker.getAirborneTicks();
         boolean bounceBlock = ctx.isOnSlipperyBlock(); // slime/honey family
 
         boolean hovering = Math.abs(net) <= hoverTolerance && descent <= hoverTolerance;
+        boolean lowGradientSink = !bounceBlock && airTicks >= lowGradientMinTicks
+                && airTicks > 0 && (descent / (double) airTicks) < lowGradientMaxPerTick;
         boolean rising = !bounceBlock && upTicks >= minUpwardTicks && net > hoverTolerance;
 
-        if (!hovering && !rising) {
+        if (!hovering && !lowGradientSink && !rising) {
             return;
         }
 
-        double scale = rising ? Math.min(2.0D, 1.0D + net) : Math.min(2.0D, 1.0D + (hoverTolerance - Math.abs(net)));
+        double scale = rising ? Math.min(2.0D, 1.0D + net)
+                : Math.min(2.0D, 1.0D + Math.max(0.0D, hoverTolerance - Math.abs(net)));
         double amount = vlPerObservation * scale;
         String debug = String.format(java.util.Locale.US,
-                "airborne=%dms netY=%.2f upTicks=%d descent=%.2f hover=%b rising=%b ping=%d tps=%.2f",
-                airborne, net, upTicks, descent, hovering, rising, ctx.getPingMillis(), ctx.getServerTps());
+                "airborne=%dms netY=%.2f upTicks=%d descent=%.2f airTicks=%d hover=%b lowSink=%b rising=%b ping=%d tps=%.2f",
+                airborne, net, upTicks, descent, airTicks, hovering, lowGradientSink, rising,
+                ctx.getPingMillis(), ctx.getServerTps());
         callback.onViolation(this, amount, debug);
     }
 }

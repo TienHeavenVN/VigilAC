@@ -48,13 +48,25 @@ public final class NoFallCheck implements Check<DetectionContext> {
     private final long damageGraceMillis;
     private final int minSuspiciousLandings;
     private final double vlPerLanding;
+    private final ac.vigil.environment.BlockSupportProbe supportProbe;
     private final ac.vigil.monitor.CorrelationEngine correlation = new ac.vigil.monitor.CorrelationEngine();
 
     public NoFallCheck(double minFallDistance, long damageGraceMillis, int minSuspiciousLandings, double vlPerLanding) {
+        this(minFallDistance, damageGraceMillis, minSuspiciousLandings, vlPerLanding, null);
+    }
+
+    /**
+     * @param supportProbe server-side collision probe for the landing column,
+     *                     or {@code null} to disable the collision-verified path
+     *                     (unit tests without a server)
+     */
+    public NoFallCheck(double minFallDistance, long damageGraceMillis, int minSuspiciousLandings, double vlPerLanding,
+                       ac.vigil.environment.BlockSupportProbe supportProbe) {
         this.minFallDistance = minFallDistance;
         this.damageGraceMillis = damageGraceMillis;
         this.minSuspiciousLandings = minSuspiciousLandings;
         this.vlPerLanding = vlPerLanding;
+        this.supportProbe = supportProbe;
     }
 
     private static String exemptReason(DetectionContext ctx) {
@@ -125,10 +137,37 @@ public final class NoFallCheck implements Check<DetectionContext> {
             return;
         }
 
+        // Server-side collision probe: the client claims ground at toY where
+        // the server sees nothing solid. Verifies the landing against server
+        // collision geometry — the NoFall criterion GrimAC uses. A negative
+        // verdict is collision-verified evidence; a probe failure never convicts.
+        boolean unsupported = false;
+        if (supportProbe != null) {
+            try {
+                unsupported = !supportProbe.hasSupportBeneath(ctx.getWorldName(), ctx.getToX(), ctx.getToY(), ctx.getToZ());
+            } catch (Throwable ignored) {
+                unsupported = false; // probe failure never convicts
+            }
+        }
+        if (unsupported) {
+            data.monitor().noteCorrelation(getName(), ac.vigil.monitor.CorrelationStatus.CONFIRMED);
+            data.monitor().noteCheckEvidence(getName(), String.format(java.util.Locale.US,
+                    "probe=unsupported descent=%.2f pos=(%.2f,%.2f,%.2f)", descent, ctx.getToX(), ctx.getToY(), ctx.getToZ()));
+            tracker.resetSuspiciousLandings();
+            double amount = vlPerLanding * Math.min(2.0D, descent / minFallDistance);
+            String debug = String.format(java.util.Locale.US,
+                    "fallDistance=%.2f sinceFallDamage=%dms probe=unsupported ping=%d tps=%.2f",
+                    descent, data.monitor().lastFallDamageAt() > 0L ? sinceFallDamage : -1L,
+                    ctx.getPingMillis(), ctx.getServerTps());
+            callback.onViolation(this, amount, debug);
+            return;
+        }
+
         // Corroborate: informational confidence + supporting facts. The
         // correlation's suppressing list never gates VL — only server facts
         // with their own grace windows may excuse a landing.
         ac.vigil.monitor.CorrelationResult corr = correlation.correlateNoFall(data.monitor(), descent, minFallDistance);
+        data.monitor().noteCorrelation(getName(), corr.status());
 
         int streak = tracker.addSuspiciousLanding();
         data.monitor().noteNoFallSuspiciousLanding(String.format(
@@ -139,9 +178,9 @@ public final class NoFallCheck implements Check<DetectionContext> {
 
         double amount = vlPerLanding * Math.min(2.0D, descent / minFallDistance);
         String debug = String.format(java.util.Locale.US,
-                "fallDistance=%.2f sinceFallDamage=%dms streak=%d corr=%.2f supporting=%s ping=%d tps=%.2f",
+                "fallDistance=%.2f sinceFallDamage=%dms streak=%d corr=%.2f status=%s supporting=%s ping=%d tps=%.2f",
                 descent, data.monitor().lastFallDamageAt() > 0L ? sinceFallDamage : -1L, streak,
-                corr.confidence(), corr.supporting(),
+                corr.confidence(), corr.status(), corr.supporting(),
                 ctx.getPingMillis(), ctx.getServerTps());
         callback.onViolation(this, amount, debug);
     }

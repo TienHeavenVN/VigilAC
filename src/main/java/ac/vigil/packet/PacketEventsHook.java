@@ -9,11 +9,11 @@ import ac.vigil.data.PlayerDataManager;
  *
  * <p>PacketEvents is an optional (soft-depend) integration. This class is
  * deliberately free of any packetevents references: when packetevents is not
- * installed, the gate below returns before the implementation class
- * ({@link PacketEventsMetrics}) is ever resolved, so the JVM never loads the
- * packetevents API on servers without the plugin. All counters updated from
- * the netty thread are plain atomics; no Bukkit API is touched off the main
- * thread.</p>
+ * installed, the gate below returns before the implementation classes
+ * ({@link PacketEventsMetrics} / {@link PacketEventsTelemetry}) are ever
+ * resolved, so the JVM never loads the packetevents API on servers without
+ * the plugin. All netty-thread state lives in fixed-capacity synchronized
+ * trackers; no Bukkit API is touched off the main thread.</p>
  *
  * <p>The returned {@link Handle} must be unregistered on plugin disable so a
  * /reload never leaves stale listeners double-counting packets.</p>
@@ -23,35 +23,42 @@ public final class PacketEventsHook {
     private PacketEventsHook() {
     }
 
-    /** Registers the metrics listener if packetevents is present. Never throws. */
+    /**
+     * Registers the metrics and structured-telemetry listeners if packetevents
+     * is present. Never throws. When packetevents is absent, per-player trackers
+     * simply stay empty and every check degrades to its event-driven path.</p>
+     */
     public static Handle tryRegister(JavaPlugin plugin, PlayerDataManager dataManager) {
         Plugin packetEvents = plugin.getServer().getPluginManager().getPlugin("packetevents");
         if (packetEvents == null || !packetEvents.isEnabled()) {
-            plugin.getLogger().info("packetevents not found; packet throughput metrics are disabled (all checks work regardless)");
-            return new Handle(null, "absent");
+            plugin.getLogger().info("packetevents not found; packet metrics/telemetry disabled (all checks work regardless)");
+            return new Handle(null, null, "absent");
         }
         try {
             String version = packetEvents.getDescription().getVersion();
-            Object registered = PacketEventsMetrics.register(plugin, dataManager, version);
-            plugin.getLogger().info("Hooked into packetevents " + version);
-            return new Handle(registered, "hooked packetevents " + version);
+            Object metrics = PacketEventsMetrics.register(plugin, dataManager, version);
+            Object telemetry = PacketEventsTelemetry.register(plugin, dataManager, version);
+            plugin.getLogger().info("Hooked into packetevents " + version + " (metrics + telemetry)");
+            return new Handle(metrics, telemetry, "hooked packetevents " + version);
         } catch (Throwable throwable) {
-            plugin.getLogger().warning("Failed to hook into packetevents; packet metrics disabled: " + throwable);
-            return new Handle(null, "failed: " + throwable.getClass().getSimpleName());
+            plugin.getLogger().warning("Failed to hook into packetevents; packet metrics/telemetry disabled: " + throwable);
+            return new Handle(null, null, "failed: " + throwable.getClass().getSimpleName());
         }
     }
 
     /**
-     * Holds the registered packetevents listener (or none) and the human-readable
+     * Holds the registered packetevents listeners (or none) and the human-readable
      * outcome. {@link #unregister()} is idempotent and safe to call at any time.
      */
     public static final class Handle {
         /** Object packetevents registered (a PacketListenerCommon), kept as Object so this class never hard-references packetevents. */
         private final Object registeredListener;
+        private final Object registeredTelemetry;
         private final String status;
 
-        private Handle(Object registeredListener, String status) {
+        private Handle(Object registeredListener, Object registeredTelemetry, String status) {
             this.registeredListener = registeredListener;
+            this.registeredTelemetry = registeredTelemetry;
             this.status = status;
         }
 
@@ -61,17 +68,18 @@ public final class PacketEventsHook {
         }
 
         public boolean isAvailable() {
-            return registeredListener != null;
+            return registeredListener != null || registeredTelemetry != null;
         }
 
-        /** Unregister the packet listener packetevents holds; call on plugin disable. Safe to call twice. */
+        /** Unregister both packet listeners packetevents holds; call on plugin disable. Safe to call twice. */
         public void unregister() {
-            // Never even touch PacketEventsMetrics when nothing was registered
+            // Never even touch the packetevents classes when nothing was registered
             // (keeps the packetevents-absent server free of any PE class loading).
-            if (registeredListener == null) {
+            if (registeredListener == null && registeredTelemetry == null) {
                 return;
             }
             PacketEventsMetrics.unregister(registeredListener);
+            PacketEventsTelemetry.unregister(registeredTelemetry);
         }
     }
 }

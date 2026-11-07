@@ -39,6 +39,13 @@ public final class DetectionContext {
     private final double movePacketsPerSecond;
     private final boolean levitation;
     private final boolean slowFalling;
+    private final boolean inWeb;
+    /** Standing on a block that slows horizontal movement (soul sand/soil, honey, berry bush). */
+    private final boolean onSlowBlock;
+    /** Feet are NOT in liquid but the block directly below is water — the "walking on water" signature. */
+    private final boolean onWaterSurface;
+    /** Feet equipment carries the Frost Walker enchantment (vanilla legal water walking). */
+    private final boolean frostWalker;
 
     private DetectionContext(Builder b) {
         this.player = b.player;
@@ -72,6 +79,10 @@ public final class DetectionContext {
         this.movePacketsPerSecond = b.movePacketsPerSecond;
         this.levitation = b.levitation;
         this.slowFalling = b.slowFalling;
+        this.inWeb = b.inWeb;
+        this.onSlowBlock = b.onSlowBlock;
+        this.onWaterSurface = b.onWaterSurface;
+        this.frostWalker = b.frostWalker;
     }
 
     public java.util.UUID getPlayer() { return player; }
@@ -107,6 +118,14 @@ public final class DetectionContext {
     public boolean isLevitation() { return levitation; }
     /** True while Slow Falling is active (vanilla reduced gravity otherwise indistinguishable from hover). */
     public boolean isSlowFalling() { return slowFalling; }
+    /** Feet or head is inside a cobweb (vanilla heavy drag on all motion). */
+    public boolean isInWeb() { return inWeb; }
+    /** Standing on a movement-slowing block (soul sand/soil, honey, berry bush). */
+    public boolean isOnSlowBlock() { return onSlowBlock; }
+    /** Feet are dry but the block below is water (vanilla-impossible without Frost Walker). */
+    public boolean isOnWaterSurface() { return onWaterSurface; }
+    /** Boots carry Frost Walker — vanilla legal walking on water. */
+    public boolean hasFrostWalker() { return frostWalker; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -123,6 +142,10 @@ public final class DetectionContext {
         private long timestamp = System.currentTimeMillis();
         private double movePacketsPerSecond = 20.0D;
         private boolean levitation, slowFalling;
+        private boolean inWeb;
+        private boolean onSlowBlock;
+        private boolean onWaterSurface;
+        private boolean frostWalker;
 
         public Builder player(java.util.UUID player) { this.player = player; return this; }
         public Builder worldName(String worldName) { this.worldName = worldName == null ? "" : worldName; return this; }
@@ -146,6 +169,10 @@ public final class DetectionContext {
         public Builder movePacketsPerSecond(double movePacketsPerSecond) { this.movePacketsPerSecond = movePacketsPerSecond; return this; }
         public Builder levitation(boolean levitation) { this.levitation = levitation; return this; }
         public Builder slowFalling(boolean slowFalling) { this.slowFalling = slowFalling; return this; }
+        public Builder inWeb(boolean inWeb) { this.inWeb = inWeb; return this; }
+        public Builder onSlowBlock(boolean onSlowBlock) { this.onSlowBlock = onSlowBlock; return this; }
+        public Builder onWaterSurface(boolean onWaterSurface) { this.onWaterSurface = onWaterSurface; return this; }
+        public Builder frostWalker(boolean frostWalker) { this.frostWalker = frostWalker; return this; }
 
         public DetectionContext build() {
             if (player == null) {

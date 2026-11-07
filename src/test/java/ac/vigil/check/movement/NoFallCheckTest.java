@@ -137,3 +137,76 @@ class NoFallCheckTest {
         assertTrue(flagged.isEmpty());
     }
 }
+
+class NoFallProbeTest {
+
+    private static final UUID PLAYER = UUID.randomUUID();
+
+    private NoFallCheck check;
+    private PlayerData data;
+    private List<Double> flagged;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        // Probe reports NO support — client claims ground over air.
+        check = new NoFallCheck(3.5D, 500L, 3, 1.0D, new ac.vigil.environment.BlockSupportProbe() {
+            @Override
+            public boolean hasSupportBeneath(String worldName, double x, double y, double z) {
+                return false;
+            }
+        });
+        data = new PlayerData(PLAYER);
+        flagged = new ArrayList<>();
+    }
+
+    private ViolationCallback sink() {
+        return (c, vl, debug) -> flagged.add(vl);
+    }
+
+    @Test
+    void unsupportedClaimFlagsImmediately() {
+        long now = 1_000_000L;
+        // Accumulate a 6-block fall over ~30 ticks, then claim ground.
+        for (int i = 0; i < 30; i++) {
+            now += 50L;
+            DetectionContext air = DetectionContext.builder()
+                    .player(PLAYER).worldName("world")
+                    .from(0.0D, 90.0D - 0.3D * i, 0.0D).to(0.0D, 90.0D - 0.3D * (i + 1), 0.0D)
+                    .onGround(false).serverTps(20.0D).timestamp(now).build();
+            check.evaluate(air, data, sink());
+        }
+        DetectionContext landing = DetectionContext.builder()
+                .player(PLAYER).worldName("world")
+                .from(0.0D, 72.0D, 0.0D).to(0.0D, 70.0D, 0.0D)
+                .onGround(true).serverTps(20.0D).timestamp(now + 50L).build();
+        check.evaluate(landing, data, sink());
+        assertFalse(flagged.isEmpty(), "ground claimed over air must flag on collision-verified evidence");
+    }
+
+    @Test
+    void probeExceptionNeverConvicts() {
+        NoFallCheck throwing = new NoFallCheck(3.5D, 500L, 3, 1.0D, new ac.vigil.environment.BlockSupportProbe() {
+            @Override
+            public boolean hasSupportBeneath(String worldName, double x, double y, double z) {
+                throw new RuntimeException("world gone");
+            }
+        });
+        long now = 1_000_000L;
+        for (int i = 0; i < 30; i++) {
+            now += 50L;
+            DetectionContext air = DetectionContext.builder()
+                    .player(PLAYER).worldName("world")
+                    .from(0.0D, 90.0D, 0.0D).to(0.0D, 90.0D - 0.2D, 0.0D)
+                    .onGround(false).serverTps(20.0D).timestamp(now).build();
+            throwing.evaluate(air, data, sink());
+        }
+        DetectionContext landing = DetectionContext.builder()
+                .player(PLAYER).worldName("world")
+                .from(0.0D, 84.0D, 0.0D).to(0.0D, 82.0D, 0.0D)
+                .onGround(true).serverTps(20.0D).timestamp(now + 50L).build();
+        // Probe throws: must be treated as "supported" → falls back to the streak path →
+        // no flag on the FIRST landing, and no exception escapes.
+        assertDoesNotThrow(() -> throwing.evaluate(landing, data, sink()));
+        assertTrue(flagged.isEmpty(), "a probe failure can never convict");
+    }
+}

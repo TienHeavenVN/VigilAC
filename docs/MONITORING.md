@@ -59,14 +59,24 @@ config (alert threshold, enabled) into a state: `CLEAR` (VL 0), `SUSPECT` (VL > 
 State is computed at render time from live VL, so it can never go stale; evidence counts decay
 naturally with the ring's TTL.
 
-### Correlation (NoFall today)
+### Correlation (NoFall today) and the tri-state verdict
 
 `CorrelationEngine.correlateNoFall` answers one question: *does this landing look like cancelled
 fall damage, or is there exculpatory context?* Supporting facts: descent above threshold, recent
 suspicious landings. Suppressing facts (**informational only**): recent teleport / velocity /
 fall-damage / world-change. The result's `confidence` is surfaced in debug output and the
-suspicion evidence entry; it **never** overrides a check's gates. The gate remains the existing,
-unit-tested streak logic (3 consecutive suspicious landings) — unchanged by this work.
+suspicion evidence entry; it **never** overrides a check's gates.
+
+Phase 6 adds `CorrelationStatus` — a three-level discipline label, never a probability:
+`CONFIRMED` (≥ 2 independent supporting signals, none suppressed), `SUSPECTED` (exactly one),
+`INCONCLUSIVE` (zero, or any suppression). The verdict is stored per check on the monitor
+(`noteCorrelation`), carried into `DetectionStatus.correlationStatus()` and printed by
+`/vigilac monitor <player>` as `corr=<state>`. The NoFall collision probe path records
+`CONFIRMED` immediately (collision-verified over-air ground claim); the streak path records the
+engine's tri-state. Suppression always degrades to `INCONCLUSIVE`, by construction.
+
+A collision-verified unsupported landing flags immediately (still one landing = one violation);
+the legacy streak path is unchanged when the probe is absent or fails.
 
 **Critical semantics:** unrelated damage (zombies, lava, drowning…) is recorded but is *never*
 exculpatory for NoFall. Before this change, `ConfounderListener` reset the no-fall streak on ANY
