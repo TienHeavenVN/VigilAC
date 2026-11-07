@@ -176,14 +176,29 @@ jobs:
           # Find the central directory end to list class entries
           import zipfile
           versions = set()
+          own_versions = set()
           with zipfile.ZipFile('build/libs/VigilAC-26x.jar') as zf:
               for name in zf.namelist():
                   if name.endswith('.class'):
                       raw = zf.read(name)[6:8]
-                      versions.add(struct.unpack('>H', raw)[0])
-          print('class file versions found:', sorted(versions))
-          if min(versions) < 69:
-              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains class files older than 69 (Java 25) — the 26.x artifact is not safely isolated')
+                      v = struct.unpack('>H', raw)[0]
+                      versions.add(v)
+                      # VigilAC's own classes must be Java 25 (major 69); bundled
+                      # third-party classes (e.g. sqlite-jdbc, Java 8 bytecode) are
+                      # allowed their own targets — backwards classfile compat loads
+                      # them fine on Java 25.
+                      if name.startswith('ac/vigil/'):
+                          own_versions.add(v)
+          print('all class file versions found:', sorted(versions))
+          print('own (ac/vigil) class file versions:', sorted(own_versions))
+          if not own_versions:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains no ac/vigil classes')
+              raise SystemExit(1)
+          if min(own_versions) < 69:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains VigilAC class files older than 69 (Java 25) — the 26.x artifact was built with the wrong toolchain/release')
+              raise SystemExit(1)
+          if min(versions) < 52:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains class files older than Java 8 (52) — unexpected bundled dependency')
               raise SystemExit(1)
           PYEOF
 

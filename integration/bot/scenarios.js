@@ -340,16 +340,37 @@ define('illegal-scaffold', { kind: 'illegal', description: 'stack 4 blocks on ea
   api.result.evidence.push('server-side Rotation=[' + rot.slice(0, 80) + '] Pos=[' + possvr.slice(0, 80) + ']');
   let placed = 0;
   const errors = [];
+  const placedDest = [];
+  // mineflayer's placeBlock force-aims at the target face before writing
+  // block_place (lib/plugins/generic_place.js: bot.lookAt(faceCenter) unless
+  // forceLook is 'ignore'). With auto-aim, the server always sees the
+  // crosshair ON the placement face, so an "out-of-view placement" can never
+  // happen through the public API — every prior run scored angle 17..49deg,
+  // streak=0, VL 0. Raw placements with forceLook:'ignore' keep the fixed
+  // away-look (yaw=90deg in the view geometry) so the placement itself is the
+  // cheat signature. This is a harness-fidelity fix; no detection logic is
+  // touched.
   for (const dz of [1, 2]) {
     for (let i = 0; i < 4 && placed < 8; i++) {
-      const ref = bot.blockAt(pos.offset(2, -1 + placed % 4, dz));
-      if (!ref) { errors.push('null@' + dz + ',' + i); break; }
-      try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) { errors.push(String((e && e.message) || e).slice(0, 160)); break; }
+      const ref = bot.blockAt(pos.offset(2, -1 + i, dz));
+      if (!ref || ref.name === 'air') { errors.push('ref-missing@' + dz + ',' + i); break; }
+      try {
+        await bot._genericPlace(ref, new Vec3(0, 1, 0), { forceLook: 'ignore', swingArm: 'right' });
+        placed++;
+        placedDest.push(pos.offset(2, i, dz));
+        await api.sleep(120); // server places synchronously on receipt; give block_update time to land locally
+      } catch (e) { errors.push(String((e && e.message) || e).slice(0, 160)); break; }
     }
+  }
+  await api.sleep(500);
+  let verified = 0;
+  for (const d of placedDest) {
+    const b = bot.blockAt(d);
+    if (b && b.name === 'dirt') verified++;
   }
   api.rcon(`execute if block ${pos.x + 2} ${pos.y + 2} ${pos.z + 1} minecraft:dirt run say SCAFFOLD_APEX_DIRT`);
   api.rcon(`execute if block ${pos.x + 2} ${pos.y + 2} ${pos.z + 2} minecraft:dirt run say SCAFFOLD_APEX_DIRT`);
-  api.result.evidence.push('placed ' + placed + ' blocks behind the player (angle ~180deg)' + (errors.length ? ' errors=[' + errors.join(' || ') + ']' : ''));
+  api.result.evidence.push('placed ' + placed + ' blocks behind the player (angle ~180deg), verified ' + verified + '/' + placed + ' dirt in world state' + (errors.length ? ' errors=[' + errors.join(' || ') + ']' : ''));
 });
 
 define('illegal-fastplace', { kind: 'illegal', description: 'stack 6 blocks on each of 4 fresh pillars (24 placements, >7/s per 2s window)', expect: ['fast-place'] }, async (bot, api) => {
@@ -358,18 +379,20 @@ define('illegal-fastplace', { kind: 'illegal', description: 'stack 6 blocks on e
   await api.sleep(200);
   const dirt = bot.inventory.items().find((item) => item.name === 'dirt');
   if (dirt) { try { await bot.equip(dirt, 'hand'); } catch (e) { api.result.evidence.push('equip failed: ' + e.message); } } else { api.result.evidence.push('dirt not in inventory after give'); }
-  // Fresh pillar patch at (0..1, pad, 5..6): nothing else builds here (scaffold
-  // bricks x=2..3 with dirt pillars, which would make the i=0 placements
-  // impossible). Pillar targets are facing yaw=0 (+z, south).
+  // Fresh pillar patch at (0..3, pad, 5): the z=6 row consistently died to
+  // "Server did not answer the placement ... blockUpdate did not fire within
+  // timeout of 5000ms" (two 5s timeouts burned the 8s budget in run
+  // 42334359016, leaving 12 placements at ~1/s). The z=5 row placed fine at
+  // full speed. Pillar targets are facing yaw=0 (+z, south).
   api.rcon(`execute at ${name} run setblock ~0 ~-1 ~5 dirt`);
-  api.rcon(`execute at ${name} run setblock ~0 ~-1 ~6 dirt`);
   api.rcon(`execute at ${name} run setblock ~1 ~-1 ~5 dirt`);
-  api.rcon(`execute at ${name} run setblock ~1 ~-1 ~6 dirt`);
+  api.rcon(`execute at ${name} run setblock ~2 ~-1 ~5 dirt`);
+  api.rcon(`execute at ${name} run setblock ~3 ~-1 ~5 dirt`);
   await api.sleep(700);
   const pos = bot.entity.position.floored();
   await bot.look(0, 0, true); // facing +z (south): pillars dead ahead
   await api.sleep(150);
-  const pillars = [[0, 5], [0, 6], [1, 5], [1, 6]];
+  const pillars = [[0, 5], [1, 5], [2, 5], [3, 5]];
   let placed = 0;
   const errors = [];
   const started = Date.now();
