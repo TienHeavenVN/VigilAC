@@ -13,6 +13,7 @@ All permissions default to **op**.
 | `vigilac.reload` | Reload `config.yml`. |
 | `vigilac.exempt` | **Bypass all checks.** Also grants the exemption toggle subcommand. Grant sparingly (staff, known-good builders). |
 | `vigilac.monitor` | View continuous monitoring state and per-check detection status for a player (`/vigilac monitor <player>`). |
+| `vigilac.ai` | View AI-assist reports, assistant narratives and module status (`/vigilac ai ...`). Advisory only; never triggers action. |
 
 Notes:
 

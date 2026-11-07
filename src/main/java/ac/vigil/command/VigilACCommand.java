@@ -1,6 +1,7 @@
 package ac.vigil.command;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -12,6 +13,11 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ac.vigil.VigilAC;
+import ac.vigil.ai.AiServices;
+import ac.vigil.ai.assistant.AdminAssistant;
+import ac.vigil.ai.evidence.AiAssessment;
+import ac.vigil.ai.report.PlayerProfile;
+import ac.vigil.ai.runtime.AiStatus;
 import ac.vigil.check.Check;
 import ac.vigil.monitor.DetectionState;
 import ac.vigil.data.PlayerData;
@@ -24,7 +30,7 @@ import ac.vigil.util.Text;
 public final class VigilACCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS =
-            List.of("info", "alerts", "check", "violations", "debug", "reload", "exempt", "monitor", "help");
+            List.of("info", "alerts", "check", "violations", "debug", "reload", "exempt", "monitor", "ai", "help");
 
     private final VigilAC plugin;
 
@@ -52,6 +58,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             case "reload" -> reload(sender);
             case "exempt" -> exempt(sender, args);
             case "monitor" -> monitor(sender, args);
+            case "ai" -> ai(sender, args);
             default -> sender.sendMessage(Text.colorize("&cUnknown subcommand. Use &e/vigilac help&c."));
         }
         return true;
@@ -67,6 +74,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("vigilac.reload")) sender.sendMessage(Text.colorize("&e/vigilac reload &7— reload config.yml"));
         if (sender.hasPermission("vigilac.exempt")) sender.sendMessage(Text.colorize("&e/vigilac exempt <player> [check|*] &7— toggle check exemptions"));
         if (sender.hasPermission("vigilac.monitor")) sender.sendMessage(Text.colorize("&e/vigilac monitor <player> &7— continuous monitoring state + per-check detection status"));
+        if (sender.hasPermission("vigilac.ai")) sender.sendMessage(Text.colorize("&e/vigilac ai <player|status|assistant|ask> &7— AI-assist report / module status (advisory; never punishes)"));
     }
 
     private void info(CommandSender sender) {
@@ -357,6 +365,142 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    /**
+     * {@code /vigilac ai <player>} — AI-assist report; {@code /vigilac ai status} — module status;
+     * {@code /vigilac ai assistant <player>} — assistant narrative; {@code /vigilac ai ask <player> <question...>}.
+     * Everything rendered here is advisory: it never writes violation levels and never triggers actions.
+     */
+    private void ai(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("vigilac.ai")) {
+            noPerm(sender);
+            return;
+        }
+        AiServices services = plugin.getAiServices();
+        if (services == null) {
+            sender.sendMessage(Text.colorize("&eAI module is not initialised (plugin reloading?)."));
+            return;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(Text.colorize("&cUsage: /vigilac ai <player|status|assistant <player>|ask <player> <question...>>"));
+            return;
+        }
+        String sub = args[1].toLowerCase(Locale.ROOT);
+        switch (sub) {
+            case "status" -> aiStatus(sender);
+            case "assistant" -> aiAssistant(sender, args, services);
+            case "ask" -> aiAsk(sender, args, services);
+            default -> aiReport(sender, args, services);
+        }
+    }
+
+    private void aiReport(CommandSender sender, String[] args, AiServices services) {
+        Player target = targetPlayer(sender, args[1]);
+        if (target == null) {
+            return;
+        }
+        PlayerData data = plugin.getPlayerDataManager().get(target.getUniqueId());
+        if (data == null) {
+            sender.sendMessage(Text.colorize("&e" + target.getName() + " is not being tracked yet."));
+            return;
+        }
+        long now = data.monitor().nowMillis();
+        String report = services.reportFor(data, target.getName(), now);
+        if (report == null) {
+            sender.sendMessage(Text.colorize("&eReport unavailable for " + target.getName()));
+            return;
+        }
+        for (String line : report.split("\n")) {
+            sender.sendMessage(line);
+        }
+    }
+
+    private void aiStatus(CommandSender sender) {
+        AiServices services = plugin.getAiServices();
+        AiStatus status = services.status();
+        sender.sendMessage(Text.colorize("&6AI module status"));
+        sender.sendMessage(Text.colorize("&7  enabled: &e" + status.enabled()
+                + " &7| shadow-only: &e" + status.shadowOnly()
+                + " &7| usable: &e" + status.usable()));
+        sender.sendMessage(Text.colorize("&7  reason: &e" + (status.unavailableReason() == null ? "none" : status.unavailableReason())));
+        if (status.modelStatuses().isEmpty()) {
+            sender.sendMessage(Text.colorize("&7  models: &enone (directory empty or all unavailable)"));
+        } else {
+            sender.sendMessage(Text.colorize("&7  models:"));
+            for (String line : status.modelStatuses()) {
+                sender.sendMessage(Text.colorize("&7    " + line));
+            }
+        }
+        sender.sendMessage(Text.colorize(String.format(Locale.US,
+                "&7  counters: submitted=&e%d dropped=&e%d completed=&e%d failed=&e%d timedOut=&e%d invalid=&e%d latencyEma=&e%.3fms",
+                status.submitted(), status.droppedFull(), status.completed(),
+                status.failed(), status.timedOut(), status.invalidSnapshots(), status.averageLatencyMillis())));
+        sender.sendMessage(Text.colorize("&7  AI output is advisory only — it never writes violation levels, alerts, kicks or bans."));
+        sender.sendMessage(Text.colorize("&7  Deterministic checks remain authoritative."));
+    }
+
+    private void aiAssistant(CommandSender sender, String[] args, AiServices services) {
+        if (args.length < 3) {
+            sender.sendMessage(Text.colorize("&cUsage: /vigilac ai assistant <player>"));
+            return;
+        }
+        Player target = targetPlayer(sender, args[2]);
+        if (target == null) {
+            return;
+        }
+        PlayerData data = plugin.getPlayerDataManager().get(target.getUniqueId());
+        if (data == null) {
+            sender.sendMessage(Text.colorize("&e" + target.getName() + " is not being tracked yet."));
+            return;
+        }
+        long now = data.monitor().nowMillis();
+        PlayerProfile profile = services.profileFor(data, target.getName(), now);
+        AiAssessment assessment = services.config().enabled() ? services.assessmentFor(data, now) : null;
+        AdminAssistant assistant = services.assistantFor(target.getName());
+        sender.sendMessage(Text.colorize("&6AI assistant (advisory) — &e" + target.getName()));
+        sendLines(sender, assistant.summarizePlayer(profile, assessment));
+        sendLines(sender, assistant.explainAssessment(assessment));
+        sendLines(sender, assistant.falsePositiveReading(assessment));
+        sendLines(sender, assistant.recommendedInvestigation(assessment));
+    }
+
+    private void aiAsk(CommandSender sender, String[] args, AiServices services) {
+        if (args.length < 4) {
+            sender.sendMessage(Text.colorize("&cUsage: /vigilac ai ask <player> <question...>"));
+            return;
+        }
+        Player target = targetPlayer(sender, args[2]);
+        if (target == null) {
+            return;
+        }
+        PlayerData data = plugin.getPlayerDataManager().get(target.getUniqueId());
+        if (data == null) {
+            sender.sendMessage(Text.colorize("&e" + target.getName() + " is not being tracked yet."));
+            return;
+        }
+        String question = String.join(" ", Arrays.copyOfRange(args, 3, args.length));
+        long now = data.monitor().nowMillis();
+        String report = services.reportFor(data, target.getName(), now);
+        AdminAssistant assistant = services.assistantFor(target.getName());
+        sendLines(sender, assistant.ask(question, report == null ? "" : report));
+    }
+
+    private static void sendLines(CommandSender sender, String text) {
+        if (text == null) {
+            return;
+        }
+        for (String line : text.split("\n")) {
+            sender.sendMessage(line);
+        }
+    }
+
+    private Player targetPlayer(CommandSender sender, String name) {
+        Player target = Bukkit.getPlayerExact(name);
+        if (target == null) {
+            sender.sendMessage(Text.colorize("&cPlayer not found: " + name));
+        }
+        return target;
+    }
+
     private static String truncate(String value, int max) {
         if (value == null) {
             return "";
@@ -407,8 +551,16 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             return filter(SUBCOMMANDS, args[0]);
         }
         String sub = args[0].toLowerCase(Locale.ROOT);
-        if (args.length == 2 && (sub.equals("check") || sub.equals("violations") || sub.equals("debug") || sub.equals("exempt") || sub.equals("monitor"))) {
+        if (args.length == 2 && (sub.equals("check") || sub.equals("violations") || sub.equals("debug") || sub.equals("exempt") || sub.equals("monitor") || sub.equals("ai"))) {
+            if (sub.equals("ai")) {
+                List<String> options = new ArrayList<>(List.of("status", "assistant", "ask"));
+                options.addAll(onlineNames());
+                return filter(options, args[1]);
+            }
             return filter(onlineNames(), args[1]);
+        }
+        if (args.length == 3 && sub.equals("ai") && (args[1].equalsIgnoreCase("assistant") || args[1].equalsIgnoreCase("ask"))) {
+            return filter(onlineNames(), args[2]);
         }
         if (args.length == 3 && sub.equals("check")) {
             List<String> names = new ArrayList<>();

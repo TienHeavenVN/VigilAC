@@ -1,6 +1,9 @@
 package ac.vigil;
 
 import java.io.File;
+import ac.vigil.ai.AiConfig;
+import ac.vigil.ai.AiServices;
+import ac.vigil.ai.BukkitConfigSource;
 import ac.vigil.alert.AlertManager;
 import ac.vigil.check.CheckManager;
 import ac.vigil.check.ViolationPipeline;
@@ -59,6 +62,7 @@ public final class VigilAC extends JavaPlugin {
     private ViolationPipeline pipeline;
     private PacketEventsHook.Handle packetEventsHandle;
     private AttackAttemptDispatcher attackAttemptDispatcher;
+    private AiServices aiServices;
 
     @Override
     public void onEnable() {
@@ -117,6 +121,15 @@ public final class VigilAC extends JavaPlugin {
             getLogger().severe("Command 'vigilac' missing from plugin.yml — /vigilac will not work");
         }
 
+        // AI-assist module (advisory only; defaults to OFF; deterministic engine unaffected).
+        // Constructed after the pipeline exists, stopped before storage closes.
+        AiConfig aiConfig = new AiConfig(new BukkitConfigSource(getConfig()));
+        this.aiServices = new AiServices(getLogger(), aiConfig, playerDataManager,
+                () -> getServer().getTPS()[0], System::currentTimeMillis);
+        this.aiServices.start(getDataFolder().toPath());
+        int aiIntervalTicks = aiConfig.inferenceIntervalSeconds() * 20;
+        getServer().getScheduler().runTaskTimer(this, this::aiScanTick, 20L, aiIntervalTicks);
+
         // VL decay + storage flush ride the same 1s timer.
         getServer().getScheduler().runTaskTimer(this, this::maintenanceTick, 20L, 20L);
 
@@ -126,6 +139,12 @@ public final class VigilAC extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // 0) Stop the AI module first: interrupt inference workers and discard pending jobs
+        //    before any other subsystem shuts down.
+        if (aiServices != null) {
+            aiServices.stop();
+            aiServices = null;
+        }
         // 1) Stop the decay/flush scheduler first so a queued maintenanceTick can
         //    never enqueue a record into a storage instance that is closing.
         if (getServer().getScheduler() != null) {
@@ -243,6 +262,19 @@ public final class VigilAC extends JavaPlugin {
         return getVigilacConfig().checkSettings(checkName);
     }
 
+    private void aiScanTick() {
+        AiServices services = aiServices;
+        if (services == null) {
+            return;
+        }
+        try {
+            services.scanTick();
+        } catch (Throwable t) {
+            // The AI module must never take the main thread down with it.
+            getLogger().warning("[ai] scan tick failed: " + t);
+        }
+    }
+
     private void maintenanceTick() {
         VigilACConfig cfg = getVigilacConfig();
         double decayPerTick = Math.max(0.0D, cfg.decayPerSecond()); // one tick == one second
@@ -261,6 +293,11 @@ public final class VigilAC extends JavaPlugin {
 
     public PlayerDataManager getPlayerDataManager() {
         return playerDataManager;
+    }
+
+    /** AI-assist module. May be null during disable; always non-null while enabled. */
+    public AiServices getAiServices() {
+        return aiServices;
     }
 
     public CheckManager getCheckManager() {

@@ -236,6 +236,51 @@ confounders:
   # Base grace after velocity/knockback events (milliseconds); scales up to 2s with impulse strength.
   velocity-grace-millis: 800
 
+# ============================================================
+# AI-assist (OPTIONAL, advisory only — never punishes)
+# Hard rules: AI output never writes violation levels, alerts, kicks
+# or bans. ML anomaly scores alone can never raise a risk tier above
+# LOW. Real client action still requires a human decision. The
+# deterministic engine runs unchanged with AI disabled or broken.
+# ============================================================
+ai:
+  # Master switch. Default OFF: no model loading, no inference, zero cost.
+  enabled: false
+  # Reserved flag. Only shadow mode exists today; setting this to false is
+  # IGNORED (reported as a config problem) — relaxing it requires a code change.
+  shadow-mode: true
+  # Bounded queue between the scheduler and the inference pool. When full,
+  # new jobs are dropped (counted in /vigilac ai status) — never blocks the main thread.
+  max-queue-size: 128
+  # Inference worker threads (1-4). Work runs OFF the main and Netty threads.
+  worker-threads: 1
+  # Per-model inference timeout in milliseconds; overruns are discarded and counted.
+  inference-timeout-millis: 250
+  # Seconds between AI scan ticks (each tick scores all tracked players).
+  inference-interval-seconds: 5
+  # Directory (relative to the plugin data folder) with *.manifest + model artifacts.
+  models-directory: ai-models
+  # Shadow anomaly score at/above which deterministic corroboration counts as AI corroboration.
+  isolation-forest-threshold: 0.6
+  # Enforced: ML scores can never corroborate themselves; deterministic evidence is required for MEDIUM+.
+  require-deterministic-corroboration: true
+  # Minimum click-interval samples before cadence features are treated as statistically meaningful.
+  min-combat-samples: 20
+  admin-assistant:
+    # Explains assessments, flags likely false positives, recommends investigation. Never bans.
+    enabled: false
+    llm:
+      # External LLM API. DEFAULT OFF. Enabling sends REDACTED telemetry to the configured
+      # endpoint — a conscious owner decision. No provider ships with VigilAC; the built-in
+      # fallback answers from offline templates without any network access.
+      enabled: false
+      # HTTPS endpoint for an OpenAI-compatible chat-completions API (empty = offline templates).
+      endpoint: ''
+      # Environment variable holding the API key (never the key itself).
+      api-key-env: ''
+      # Redact the target's name, UUIDs and IPs from any text sent to the LLM. Strongly recommended.
+      redact-identifiers: true
+
 # Global debug output to players with the vigilac.debug permission (verbose).
 debug: false
 

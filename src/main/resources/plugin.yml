@@ -11,7 +11,7 @@ softdepend:
 commands:
   vigilac:
     description: VigilAC administration command
-    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|monitor|help>
+    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|monitor|ai|help>
     permission: vigilac.command
 permissions:
   vigilac.command:
@@ -40,4 +40,7 @@ permissions:
     default: op
   vigilac.monitor:
     description: View continuous monitoring state and per-check detection status for a player
+    default: op
+  vigilac.ai:
+    description: View AI-assist reports and module status (advisory; never triggers punishment)
     default: op

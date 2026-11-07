@@ -96,6 +96,26 @@ class ConfigResourceTest {
         assertTrue(confounders.containsKey("teleport-grace-seconds"));
         assertTrue(confounders.containsKey("velocity-grace-millis"));
 
+        // AI-assist block: everything OFF / shadow-only by default (packaging-level contract).
+        Map<String, Object> ai = castMap(root.get("ai"));
+        assertNotNull(ai, "ai section is required (defaults must ship in config.yml)");
+        assertEquals(Boolean.FALSE, ai.get("enabled"), "ai.enabled must default to false");
+        assertEquals(Boolean.TRUE, ai.get("shadow-mode"), "ai.shadow-mode must default to true");
+        for (String key : List.of("max-queue-size", "worker-threads", "inference-timeout-millis",
+                "inference-interval-seconds", "models-directory", "isolation-forest-threshold",
+                "require-deterministic-corroboration", "min-combat-samples")) {
+            assertTrue(ai.containsKey(key), "ai." + key + " is required by the code");
+        }
+        assertEquals(Boolean.TRUE, ai.get("require-deterministic-corroboration"),
+                "ML corroboration requirement must default to true");
+        Map<String, Object> assistant = castMap(ai.get("admin-assistant"));
+        assertNotNull(assistant, "ai.admin-assistant section required");
+        assertEquals(Boolean.FALSE, assistant.get("enabled"), "admin assistant must default to false");
+        Map<String, Object> llm = castMap(assistant.get("llm"));
+        assertNotNull(llm, "ai.admin-assistant.llm section required");
+        assertEquals(Boolean.FALSE, llm.get("enabled"), "LLM egress must default to false");
+        assertEquals(Boolean.TRUE, llm.get("redact-identifiers"), "LLM redaction must default to true");
+
         assertEquals(Boolean.FALSE, root.get("debug"));
         assertEquals("vigilac.exempt", root.get("exempt-permission"));
     }
@@ -108,7 +128,7 @@ class ConfigResourceTest {
         assertTrue(text.contains("vigilac:"), "plugin.yml declares the vigilac command");
         assertTrue(text.contains("permission: vigilac.command"), "plugin.yml wires the base permission");
         for (String perm : List.of("vigilac.alerts", "vigilac.check", "vigilac.violations",
-                "vigilac.debug", "vigilac.reload", "vigilac.exempt", "vigilac.info")) {
+                "vigilac.debug", "vigilac.reload", "vigilac.exempt", "vigilac.info", "vigilac.ai")) {
             assertTrue(text.contains(perm + ":"), "plugin.yml must declare permission " + perm);
         }
     }
