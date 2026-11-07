@@ -46,6 +46,13 @@ public final class DetectionContext {
     private final boolean onWaterSurface;
     /** Feet equipment carries the Frost Walker enchantment (vanilla legal water walking). */
     private final boolean frostWalker;
+    /**
+     * The block directly under the player's feet (at the start or the end of
+     * this movement) is slime/ice/honey-family. Used by slime-bounce analysis:
+     * on the tick a sneak-charged bounce leaves the block, the feet have
+     * already left it, so an at-feet read alone misses the charge.
+     */
+    private final boolean belowFeetSlippery;
 
     private DetectionContext(Builder b) {
         this.player = b.player;
@@ -83,6 +90,7 @@ public final class DetectionContext {
         this.onSlowBlock = b.onSlowBlock;
         this.onWaterSurface = b.onWaterSurface;
         this.frostWalker = b.frostWalker;
+        this.belowFeetSlippery = b.belowFeetSlippery;
     }
 
     public java.util.UUID getPlayer() { return player; }
@@ -126,6 +134,8 @@ public final class DetectionContext {
     public boolean isOnWaterSurface() { return onWaterSurface; }
     /** Boots carry Frost Walker — vanilla legal walking on water. */
     public boolean hasFrostWalker() { return frostWalker; }
+    /** Block directly under the player's feet (at either end of the tick) is slippery-family; slime bounce evidence. */
+    public boolean isBelowFeetSlippery() { return belowFeetSlippery; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -146,6 +156,7 @@ public final class DetectionContext {
         private boolean onSlowBlock;
         private boolean onWaterSurface;
         private boolean frostWalker;
+        private boolean belowFeetSlippery;
 
         public Builder player(java.util.UUID player) { this.player = player; return this; }
         public Builder worldName(String worldName) { this.worldName = worldName == null ? "" : worldName; return this; }
@@ -173,6 +184,7 @@ public final class DetectionContext {
         public Builder onSlowBlock(boolean onSlowBlock) { this.onSlowBlock = onSlowBlock; return this; }
         public Builder onWaterSurface(boolean onWaterSurface) { this.onWaterSurface = onWaterSurface; return this; }
         public Builder frostWalker(boolean frostWalker) { this.frostWalker = frostWalker; return this; }
+        public Builder belowFeetSlippery(boolean belowFeetSlippery) { this.belowFeetSlippery = belowFeetSlippery; return this; }
 
         public DetectionContext build() {
             if (player == null) {

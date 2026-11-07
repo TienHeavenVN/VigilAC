@@ -25,6 +25,7 @@ public final class PlayerData {
     private final ac.vigil.data.tracking.DiggingTracker digging = new ac.vigil.data.tracking.DiggingTracker();
     private final ac.vigil.data.tracking.FastBreakPenalty fastBreakPenalty = new ac.vigil.data.tracking.FastBreakPenalty();
     private final ac.vigil.data.tracking.ReachEvidenceLedger reachEvidence = new ac.vigil.data.tracking.ReachEvidenceLedger();
+    private final ac.vigil.data.tracking.StepBounceTracker stepBounce = new ac.vigil.data.tracking.StepBounceTracker();
     private volatile long lastDamageAt;
 
     /** VL per check name. */
@@ -223,6 +224,7 @@ public final class PlayerData {
     }
 
 
+
     public boolean isTeleportGrace() {
         return clock.getAsLong() < teleportGraceUntil;
     }
@@ -274,6 +276,11 @@ public final class PlayerData {
     /** Reach evidence reconstructed from packet-layer attack attempts (starts empty until packetevents sees attempts). */
     public ac.vigil.data.tracking.ReachEvidenceLedger reachEvidenceLedger() {
         return reachEvidence;
+    }
+
+    /** Bounded slime-bounce state machine feeding the Step check. */
+    public ac.vigil.data.tracking.StepBounceTracker stepBounceTracker() {
+        return stepBounce;
     }
 
     /** Server-side view of the client's block-digging lifecycle; empty without packetevents. */

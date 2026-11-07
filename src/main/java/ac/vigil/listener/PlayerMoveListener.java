@@ -103,6 +103,8 @@ public final class PlayerMoveListener implements Listener {
         org.bukkit.inventory.ItemStack boots = player.getInventory().getBoots();
         boolean frostWalker = boots != null && boots.containsEnchantment(org.bukkit.enchantments.Enchantment.FROST_WALKER);
         boolean slippery = isSlippery(feet.getType());
+        boolean belowFeetSlippery = isSlippery(from.getBlock().getRelative(0, -1, 0).getType())
+                || isSlippery(feet.getRelative(0, -1, 0).getType());
         boolean inWeb = feet.getType() == org.bukkit.Material.COBWEB || head.getType() == org.bukkit.Material.COBWEB;
         org.bukkit.Material feetType = feet.getType();
         boolean onSlowBlock = feetType == org.bukkit.Material.SOUL_SAND
@@ -140,6 +142,7 @@ public final class PlayerMoveListener implements Listener {
                 .inVehicle(player.isInsideVehicle())
                 .inLiquid(inLiquid)
                 .onSlipperyBlock(slippery)
+                .belowFeetSlippery(belowFeetSlippery)
                 .inWeb(inWeb)
                 .onSlowBlock(onSlowBlock)
                 .onWaterSurface(onWaterSurface)
