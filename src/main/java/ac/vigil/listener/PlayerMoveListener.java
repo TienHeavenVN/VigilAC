@@ -91,8 +91,15 @@ public final class PlayerMoveListener implements Listener {
         }
 
         Block feet = to.getBlock();
+        Block head = feet.getRelative(0, 1, 0);
         boolean inLiquid = feet.isLiquid();
         boolean slippery = isSlippery(feet.getType());
+        boolean inWeb = feet.getType() == org.bukkit.Material.COBWEB || head.getType() == org.bukkit.Material.COBWEB;
+        org.bukkit.Material feetType = feet.getType();
+        boolean onSlowBlock = feetType == org.bukkit.Material.SOUL_SAND
+                || feetType == org.bukkit.Material.SOUL_SOIL
+                || feetType == org.bukkit.Material.HONEY_BLOCK
+                || feetType == org.bukkit.Material.SWEET_BERRY_BUSH;
 
         int speedLevel = 0;
         boolean levitation = false;
@@ -124,6 +131,8 @@ public final class PlayerMoveListener implements Listener {
                 .inVehicle(player.isInsideVehicle())
                 .inLiquid(inLiquid)
                 .onSlipperyBlock(slippery)
+                .inWeb(inWeb)
+                .onSlowBlock(onSlowBlock)
                 .teleportGrace(data.isTeleportGrace())
                 .knockbackGrace(data.isKnockbackGrace())
                 .speedPotionLevel(speedLevel)

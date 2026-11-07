@@ -23,6 +23,7 @@ public final class PlayerData {
     private final ac.vigil.data.tracking.SwingTracker swings = new ac.vigil.data.tracking.SwingTracker();
     private final ac.vigil.data.tracking.RotationTracker rotations = new ac.vigil.data.tracking.RotationTracker();
     private final ac.vigil.data.tracking.DiggingTracker digging = new ac.vigil.data.tracking.DiggingTracker();
+    private final ac.vigil.data.tracking.FastBreakPenalty fastBreakPenalty = new ac.vigil.data.tracking.FastBreakPenalty();
     private volatile long lastDamageAt;
 
     /** VL per check name. */
@@ -271,6 +272,11 @@ public final class PlayerData {
     /** Server-side view of the client's block-digging lifecycle; empty without packetevents. */
     public ac.vigil.data.tracking.DiggingTracker diggingTracker() {
         return digging;
+    }
+
+    /** Decaying penalty bucket for unexplained dig-time deficits (see FastBreakPenalty). */
+    public ac.vigil.data.tracking.FastBreakPenalty fastBreakPenalty() {
+        return fastBreakPenalty;
     }
 
     /** Access to the per-player continuous monitoring state (bounded; see PlayerMonitor). */

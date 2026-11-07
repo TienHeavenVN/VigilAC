@@ -69,14 +69,35 @@ public final class BlockBreakListener implements Listener {
         }
 
         int haste = 0;
+        int fatigue = 0;
+        boolean aquaAffinity = false;
         for (PotionEffect effect : player.getActivePotionEffects()) {
             if (effect.getType() == PotionEffectType.HASTE) {
                 haste = effect.getAmplifier() + 1;
-                break;
+            } else if (effect.getType() == PotionEffectType.MINING_FATIGUE) {
+                fatigue = effect.getAmplifier() + 1;
+            } else if (effect.getType() == PotionEffectType.CONDUIT_POWER) {
+                aquaAffinity = true; // conduit power grants aqua affinity underwater
             }
         }
+        if (player.getInventory().getHelmet() != null) {
+            org.bukkit.inventory.ItemStack helmet = player.getInventory().getHelmet();
+            if (helmet != null && helmet.containsEnchantment(org.bukkit.enchantments.Enchantment.AQUA_AFFINITY)) {
+                aquaAffinity = true;
+            }
+        }
+        // Underwater = feet or eye block is liquid (water).
+        boolean inWater = false;
+        try {
+            org.bukkit.block.Block feet = player.getLocation().getBlock();
+            org.bukkit.block.Block eyes = feet.getRelative(0, 1, 0);
+            inWater = feet.getType() == Material.WATER || eyes.getType() == Material.WATER;
+        } catch (Throwable ignored) {
+            inWater = false; // world problem: treat as surface to avoid false positives
+        }
+        boolean onGround = player.isOnGround();
 
-        BreakContext context = BreakContext.builder()
+        BreakContext.Builder builder = BreakContext.builder()
                 .player(player.getUniqueId())
                 .blockType(blockName)
                 .block(block.getX(), block.getY(), block.getZ())
@@ -84,11 +105,32 @@ public final class BlockBreakListener implements Listener {
                 .correctTool(isCorrectTool(blockName, toolName))
                 .efficiency(efficiency)
                 .hasteLevel(haste)
+                .miningFatigueLevel(fatigue)
+                .inWater(inWater)
+                .aquaAffinity(aquaAffinity)
+                .onGround(onGround)
                 .pingMillis(player.getPing())
-                .timestamp(System.currentTimeMillis())
-                .build();
+                .timestamp(System.currentTimeMillis());
 
         PlayerData data = dataManager.load(player.getUniqueId());
+        // Dig lifecycle: if the digging tracker saw START_DIGGING for this break,
+        // carry the dig duration so the check can use the real break-time math
+        // instead of the completion-interval heuristic.
+        long nowMillis = System.currentTimeMillis();
+        ac.vigil.data.tracking.DiggingTracker.CompletedDig completedDig = data.diggingTracker().complete(nowMillis);
+        if (completedDig != null
+                && completedDig.getDig().getX() == block.getX()
+                && completedDig.getDig().getY() == block.getY()
+                && completedDig.getDig().getZ() == block.getZ()) {
+            builder.digDurationMillis(completedDig.getDurationMillis());
+            builder.digInconclusive(completedDig.getDig().isToolChanged() || completedDig.getDig().isDirectionChanged());
+        } else if (completedDig != null) {
+            // Break of a different block than the tracked dig (simultaneous multi-break):
+            // the tracked dig is the more recent evidence; leave this event on the legacy path.
+            builder.digDurationMillis(-1L);
+        }
+
+        BreakContext context = builder.build();
         data.monitor().noteBreak(blockName);
         checkManager.evaluateBreak(context, data, pipeline.forPlayer(player, data));
     }

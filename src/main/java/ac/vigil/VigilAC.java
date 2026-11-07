@@ -184,7 +184,8 @@ public final class VigilAC extends JavaPlugin {
                 cfg.noFallMinFallDistance(),
                 cfg.noFallDamageGraceMillis(),
                 cfg.noFallMinSuspiciousLandings(),
-                cfg.noFallVlPerLanding()));
+                cfg.noFallVlPerLanding(),
+                new ac.vigil.environment.BukkitBlockSupportProbe()));
         checkManager.register(new InvalidMovementCheck(
                 cfg.invalidMaxVerticalDelta(),
                 cfg.invalidVlPerImpossibility()));

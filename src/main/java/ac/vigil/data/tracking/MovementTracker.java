@@ -26,6 +26,7 @@ public final class MovementTracker {
     private double netVerticalAirborne;  // signed accumulated dy while airborne
     private int upwardAirborneTicks;     // consecutive positive-dy ticks while airborne
     private double descentAirborne;      // accumulated downward distance while airborne
+    private int airborneTicks;           // total airborne observations since becoming airborne
     private int suspiciousLandingStreak; // consecutive landings with excessive fall + no damage
 
     private long timerExcessSince;       // 0 when within limits
@@ -46,6 +47,7 @@ public final class MovementTracker {
             netVerticalAirborne = 0.0D;
             upwardAirborneTicks = 0;
             descentAirborne = 0.0D;
+            airborneTicks = 0;
         }
     }
 
@@ -55,6 +57,7 @@ public final class MovementTracker {
             return;
         }
         netVerticalAirborne += dy;
+        airborneTicks++;
         if (dy > 0.0D) {
             upwardAirborneTicks++;
         } else if (dy < 0.0D) {
@@ -70,6 +73,7 @@ public final class MovementTracker {
         netVerticalAirborne = 0.0D;
         upwardAirborneTicks = 0;
         descentAirborne = 0.0D;
+        airborneTicks = 0;
         return result;
     }
 
@@ -95,6 +99,11 @@ public final class MovementTracker {
     /** Accumulated downward distance since becoming airborne. */
     public synchronized double getDescentAirborne() {
         return descentAirborne;
+    }
+
+    /** Total airborne observations (move packets) since becoming airborne. */
+    public synchronized int getAirborneTicks() {
+        return airborneTicks;
     }
 
     public synchronized int addSuspiciousLanding() {

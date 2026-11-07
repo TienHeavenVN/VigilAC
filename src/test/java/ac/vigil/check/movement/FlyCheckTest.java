@@ -129,3 +129,59 @@ class FlyCheckTest {
         assertTrue(flagged.isEmpty(), "falling at terminal velocity is not flying");
     }
 }
+
+class FlyLowGradientSinkTest {
+
+    private static final UUID PLAYER = UUID.randomUUID();
+
+    private FlyCheck check;
+    private PlayerData data;
+    private List<Double> flagged;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        check = new FlyCheck(3_000L, 0.6D, 10, 1.0D);
+        data = new PlayerData(PLAYER);
+        flagged = new ArrayList<>();
+    }
+
+    private ViolationCallback sink() {
+        return (c, vl, debug) -> flagged.add(vl);
+    }
+
+    private DetectionContext airborne(double dy, long timestamp, double tps) {
+        double y = 80.0D;
+        return DetectionContext.builder()
+                .player(PLAYER)
+                .from(0.0D, y, 0.0D)
+                .to(0.0D, y + dy, 0.0D)
+                .onGround(false)
+                .serverTps(tps)
+                .timestamp(timestamp)
+                .build();
+    }
+
+    @Test
+    void sustainedLowGradientDescentFlags() {
+        // 0.03 blocks per observation for 90 observations (~4.5s): impossible
+        // under vanilla gravity, classic "slow sink" fly. Net = -2.7, which
+        // defeats the pure-hover branch.
+        long now = 1_000_000L;
+        for (int i = 0; i < 90; i++) {
+            now += 50L;
+            check.evaluate(airborne(-0.03D, now, 20.0D), data, sink());
+        }
+        assertFalse(flagged.isEmpty(), "sustained sub-0.04 b/tick descent over 40+ ticks is fly evidence");
+    }
+
+    @Test
+    void briefLowGradientDescentNeverFlags() {
+        // Only 20 observations of low-gradient descent: below the tick minimum.
+        long now = 1_000_000L;
+        for (int i = 0; i < 20; i++) {
+            now += 50L;
+            check.evaluate(airborne(-0.03D, now, 20.0D), data, sink());
+        }
+        assertTrue(flagged.isEmpty(), "short low-gradient windows are not fly evidence");
+    }
+}
