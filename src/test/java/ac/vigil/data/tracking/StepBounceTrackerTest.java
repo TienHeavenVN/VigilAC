@@ -128,7 +128,7 @@ class StepBounceTrackerTest {
         }
         // Jump beyond the 4 s rolling window; oldest sequences expire.
         now += 5_000L;
-        assertEquals(0, tracker.sequencesInWindow());
+        assertEquals(0, tracker.sequencesInWindow(now));
         tick(now, -0.5D, false);
         assertEquals(StepBounceTracker.Verdict.EXEMPT_BOUNCE, tick(now + 1, 1.0D, true));
     }

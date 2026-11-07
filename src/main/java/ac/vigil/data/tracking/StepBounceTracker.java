@@ -63,6 +63,8 @@ public final class StepBounceTracker {
     private static final double GRAVITY = 0.08D;
     /** Sneak-charged full-height rebound may launch as high as ~1.6 blocks/tick (documented vanilla ceiling); above that it is Step, not bounce. */
     private static final double LAUNCH_CAP = 1.6D;
+    /** Rounding margin so a delta reconstructed as (from + d) - from never flips the launch-cap comparison. */
+    private static final double EPSILON = 1.0E-6D;
     private static final double LAUNCH_MIN = 0.5D;
     private static final double FALLING_BEFORE_LAUNCH = -0.05D;
     /** Tolerance on the expected ballistic decay, including float jitter and knockback-free arcs. */
@@ -108,7 +110,7 @@ public final class StepBounceTracker {
             boolean launchCandidate = (belowFeetSlippery || slipperyFeet)
                     && previousDeltaY < FALLING_BEFORE_LAUNCH
                     && deltaY > LAUNCH_MIN
-                    && deltaY <= LAUNCH_CAP;
+                    && deltaY <= LAUNCH_CAP + EPSILON;
             if (launchCandidate && tryStartSequence(now, deltaY)) {
                 acceptRisingTick(deltaY, true);
                 return Verdict.EXEMPT_BOUNCE;
@@ -199,8 +201,9 @@ public final class StepBounceTracker {
         }
     }
 
-    /** Number of bounce sequences currently tracked inside the rolling window (diagnostics/tests). */
-    public synchronized int sequencesInWindow() {
+    /** Number of bounce sequences currently tracked inside the rolling window at logical time {@code now} (diagnostics/tests). */
+    public synchronized int sequencesInWindow(long now) {
+        evict(now);
         return recentLaunches.size();
     }
 
