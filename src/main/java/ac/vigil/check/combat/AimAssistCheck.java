@@ -64,6 +64,18 @@ public final class AimAssistCheck implements Check<AttackContext> {
 
     @Override
     public void evaluate(AttackContext ctx, PlayerData data, ViolationCallback callback) {
+        if (data.isDebug()) {
+            CombatTracker t = data.combatTracker();
+            double swing = -1.0D;
+            if (t.hasLastAim()) {
+                double yd = shortestAngleDegrees(t.getLastYaw(), ctx.getYaw());
+                double pd = Math.abs(t.getLastPitch() - ctx.getPitch());
+                swing = Math.hypot(yd, pd);
+            }
+            callback.onViolation(this, 0.0D, String.format(java.util.Locale.US,
+                    "DIAG swing=%.1f int=%d yaw=%.1f streak=%d",
+                    swing, t.lastAttackAgeMillis(ctx.getTimestamp()), ctx.getYaw(), t.getAimSnapStreak()));
+        }
         if (ctx.isCreativeOrSpectator() || ctx.isAttackerInVehicle()) {
             return;
         }

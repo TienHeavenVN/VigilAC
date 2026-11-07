@@ -275,6 +275,12 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
   await summonImmortalZombie(api, name, { x: 2, z: 0 });
   await api.sleep(800);
   const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+  // Aim ONCE: the zombie is stationary, and re-looking every swing would only
+  // burn physics ticks without adding crosshair precision. The crosshair stays
+  // fixed on the target server-side for the whole barrage.
+  const firstZ = Object.values(bot.entities).filter((e) => e.name === 'zombie')
+    .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
+  if (firstZ) { await lookAndAttack(bot, firstZ); await api.sleep(150); }
   const end = Date.now() + 12000;
   let attacks = 0, resummons = 0;
   while (Date.now() < end) {
@@ -286,8 +292,8 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
       continue;
     }
     zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
-    await lookAndAttack(bot, zombies[0]);
     attacks++;
+    bot._client.write('use_entity', { target: zombies[0].id, mouse: 1, hand: 0 });
     await api.sleep(30);
   }
   const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
@@ -325,6 +331,10 @@ define('illegal-scaffold', { kind: 'illegal', description: 'stack 4 blocks on ea
   await api.sleep(400);
   const pos = bot.entity.position.floored();
   await bot.look(Math.PI / 2, 0, true); // face west (-x): pillars are directly behind; angle ~180deg
+  // force=true updates local rotation immediately; the physics loop emits the
+  // matching 'look' packet on the next 50ms tick — give it ample time so the
+  // server sees yaw=90 BEFORE the first placement is evaluated.
+  await api.sleep(200);
   const rot = api.rcon(`data get entity ${name} Rotation`).replace(/\s+/g, ' ');
   const possvr = api.rcon(`data get entity ${name} Pos`).replace(/\s+/g, ' ');
   api.result.evidence.push('server-side Rotation=[' + rot.slice(0, 80) + '] Pos=[' + possvr.slice(0, 80) + ']');
@@ -342,20 +352,24 @@ define('illegal-scaffold', { kind: 'illegal', description: 'stack 4 blocks on ea
   api.result.evidence.push('placed ' + placed + ' blocks behind the player (angle ~180deg)' + (errors.length ? ' errors=[' + errors.join(' || ') + ']' : ''));
 });
 
-define('illegal-fastplace', { kind: 'illegal', description: 'stack 5 blocks on each of 4 in-reach pillars (20 placements, >7/s)', expect: ['fast-place'] }, async (bot, api) => {
+define('illegal-fastplace', { kind: 'illegal', description: 'stack 6 blocks on each of 4 fresh pillars (24 placements, >7/s per 2s window)', expect: ['fast-place'] }, async (bot, api) => {
   const name = api.result.username;
   api.rcon(`give ${name} minecraft:dirt 64`);
   await api.sleep(200);
   const dirt = bot.inventory.items().find((item) => item.name === 'dirt');
   if (dirt) { try { await bot.equip(dirt, 'hand'); } catch (e) { api.result.evidence.push('equip failed: ' + e.message); } } else { api.result.evidence.push('dirt not in inventory after give'); }
-  api.rcon(`execute at ${name} run setblock ~2 ~-1 ~1 dirt`);
-  api.rcon(`execute at ${name} run setblock ~2 ~-1 ~2 dirt`);
-  api.rcon(`execute at ${name} run setblock ~3 ~-1 ~1 dirt`);
-  api.rcon(`execute at ${name} run setblock ~3 ~-1 ~2 dirt`);
+  // Fresh pillar patch at (0..1, pad, 5..6): nothing else builds here (scaffold
+  // bricks x=2..3 with dirt pillars, which would make the i=0 placements
+  // impossible). Pillar targets are facing yaw=0 (+z, south).
+  api.rcon(`execute at ${name} run setblock ~0 ~-1 ~5 dirt`);
+  api.rcon(`execute at ${name} run setblock ~0 ~-1 ~6 dirt`);
+  api.rcon(`execute at ${name} run setblock ~1 ~-1 ~5 dirt`);
+  api.rcon(`execute at ${name} run setblock ~1 ~-1 ~6 dirt`);
   await api.sleep(700);
   const pos = bot.entity.position.floored();
-  await bot.look(-Math.PI / 2, 0, true); // face the pillars (+x): bearing fine, rate is the signal
-  const pillars = [[2, 1], [2, 2], [3, 1], [3, 2]];
+  await bot.look(0, 0, true); // facing +z (south): pillars dead ahead
+  await api.sleep(150);
+  const pillars = [[0, 5], [0, 6], [1, 5], [1, 6]];
   let placed = 0;
   const errors = [];
   const started = Date.now();
@@ -370,7 +384,7 @@ define('illegal-fastplace', { kind: 'illegal', description: 'stack 5 blocks on e
     }
   }
   if (placed > 0) {
-    const top = pos.offset(2, 4, 1); // pillar 1 apex after 5 stacks
+    const top = pos.offset(0, 4, 5); // pillar apex after 5+ stacks
     api.rcon(`execute if block ${top.x} ${top.y} ${top.z} minecraft:dirt run say DIRT_STACK_VERIFIED`);
   }
   api.result.evidence.push('placed ' + placed + ' blocks in ' + (Date.now() - started) + 'ms' + (errors.length ? ' errors=[' + errors.slice(0, 2).join(' || ') + ']' : '') + ' (stack verified via chat DIRT_STACK_VERIFIED if present)');

@@ -58,6 +58,23 @@ public final class ScaffoldCheck implements Check<PlaceContext> {
 
     @Override
     public void evaluate(PlaceContext ctx, PlayerData data, ViolationCallback callback) {
+        if (data.isDebug()) {
+            double dX = ctx.getBlockX() + 0.5D - ctx.getFeetX();
+            double dY = ctx.getBlockY() + 0.5D - ctx.getFeetY();
+            double dZ = ctx.getBlockZ() + 0.5D - ctx.getFeetZ();
+            double len = Math.sqrt(dX * dX + dY * dY + dZ * dZ);
+            double yawRad = Math.toRadians(ctx.getYaw());
+            double pitchRad = Math.toRadians(ctx.getPitch());
+            double lookX = -Math.sin(yawRad) * Math.cos(pitchRad);
+            double lookY = -Math.sin(pitchRad);
+            double lookZ = Math.cos(yawRad) * Math.cos(pitchRad);
+            double dot = len < 1.0E-4D ? 1.0D : Math.max(-1.0D, Math.min(1.0D,
+                    (lookX * dX + lookY * dY + lookZ * dZ) / len));
+            callback.onViolation(this, 0.0D, String.format(java.util.Locale.US,
+                    "DIAG angle=%.1f yaw=%.1f pitch=%.1f streak=%d",
+                    Math.toDegrees(Math.acos(dot)), ctx.getYaw(), ctx.getPitch(),
+                    data.blockActionTracker().getOutOfViewPlaceStreak()));
+        }
         double dirX = ctx.getBlockX() + 0.5D - ctx.getFeetX();
         double dirY = ctx.getBlockY() + 0.5D - ctx.getFeetY();
         double dirZ = ctx.getBlockZ() + 0.5D - ctx.getFeetZ();

@@ -71,6 +71,13 @@ public final class AutoClickerCheck implements Check<AttackContext> {
 
     @Override
     public void evaluate(AttackContext ctx, PlayerData data, ViolationCallback callback) {
+        if (data.isDebug()) {
+            CombatTracker t = data.combatTracker();
+            callback.onViolation(this, 0.0D, String.format(java.util.Locale.US,
+                    "DIAG cps=%.2f samples=%d mean=%.1f std=%.1f yaw=%.1f",
+                    t.cps(ctx.getTimestamp(), 1_000L), t.getIntervalSampleCount(),
+                    t.intervalMean(), t.intervalStddev(), ctx.getYaw()));
+        }
         if (ctx.isCreativeOrSpectator() || ctx.isAttackerInVehicle()) {
             return;
         }
