@@ -149,8 +149,8 @@ jobs:
           code=$?
           tail -n 30 compile.log
           if [ $code -ne 0 ]; then
-            grep -E 'error:|Could not|What went wrong|Execution failed|not resolvable|FAILED' compile.log | head -12 | while IFS= read -r line; do
-              printf '::error title=Compile26::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-500)"
+            tail -30 compile.log | while IFS= read -r line; do
+              [ -n "$line" ] && printf '::error title=Compile26tail::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-400)"
             done
             exit $code
           fi
@@ -595,9 +595,10 @@ jobs:
           path: server/server.log
 
   load:
-    name: Load test (${{ inputs.load_bots }} bots, manual)
+    # workflow_dispatch when permitted; else any push whose head commit message contains [load] (CI token cannot create dispatch events)
+    name: Load test (${{ inputs.load_bots || '10' }} bots)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message || '', '[load]')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -618,9 +619,16 @@ jobs:
 
       - name: Load test
         env:
-          BOTS: ${{ inputs.load_bots }}
-          DURATION_SECONDS: ${{ inputs.load_duration }}
-        run: ./integration/load.sh
+          LOAD_INPUT_BOTS: ${{ inputs.load_bots }}
+          LOAD_INPUT_DURATION: ${{ inputs.load_duration }}
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          msg="${HEAD_MSG:-}"
+          bots="${LOAD_INPUT_BOTS:-10}"; dur="${LOAD_INPUT_DURATION:-45}"
+          if [[ "$msg" =~ \[load=([0-9]+)\] ]]; then bots="${BASH_REMATCH[1]}"; fi
+          if [[ "$msg" =~ \[dur=([0-9]+)\] ]]; then dur="${BASH_REMATCH[1]}"; fi
+          echo "== resolved load test: BOTS=$bots DURATION=${dur}s (inputs: '${LOAD_INPUT_BOTS}/${LOAD_INPUT_DURATION}') =="
+          BOTS="$bots" DURATION_SECONDS="$dur" ./integration/load.sh
 
       - name: Upload load-test results
         if: always()
