@@ -246,7 +246,9 @@ public final class AiServices {
                 vlChecks++;
             }
         }
-        long breakInterval = data.blockActionTracker().breakInterval(now);
+        long rawBreakInterval = data.blockActionTracker().breakInterval(now);
+        long breakInterval = rawBreakInterval <= 0L || rawBreakInterval == Long.MAX_VALUE
+                ? 0L : Math.min(rawBreakInterval, 60_000L); // Long.MAX_VALUE ⇒ no break on record (unknown) ⇒ 0
         PlayerProfile profile = PlayerProfile.builder()
                 .targetName(displayName)
                 .snapshotAtMillis(now)
@@ -261,7 +263,7 @@ public final class AiServices {
                 .reachEma(data.reachEma())
                 .reachSamples(data.getReachSampleCount())
                 .packetsPerSecond(data.getPacketsPerSecond())
-                .breakIntervalMillisClipped(breakInterval < 0L ? 0L : breakInterval)
+                .breakIntervalMillisClipped(breakInterval)
                 .impossibleBreakStreak(data.blockActionTracker().getImpossibleBreakStreak())
                 .pingMillis(monitor == null ? 0.0D : monitor.pingEma())
                 .deterministicEvidenceCount(evidenceCount)

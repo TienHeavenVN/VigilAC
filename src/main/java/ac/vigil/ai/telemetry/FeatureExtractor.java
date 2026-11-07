@@ -47,9 +47,9 @@ public final class FeatureExtractor {
         v[15] = clip(data.movementTracker().movePacketsPerSecond(now), 0, 400);
         v[16] = clip(data.movementTracker().airborneMillis(now), 0, 3_600_000);
 
-        // ---- mining (BlockActionTracker); -1 (no history) maps to 0, the schema floor
+        // ---- mining (BlockActionTracker); Long.MAX_VALUE means "no break on record" (unknown) ⇒ floor
         long breakInterval = data.blockActionTracker().breakInterval(now);
-        v[17] = clip(breakInterval < 0L ? 0.0D : breakInterval, 0, 60_000);
+        v[17] = clip(breakInterval <= 0L || breakInterval == Long.MAX_VALUE ? 0.0D : breakInterval, 0, 60_000);
         v[18] = clip(data.blockActionTracker().getImpossibleBreakStreak(), 0, 100);
 
         // ---- context (passed in by the caller)
