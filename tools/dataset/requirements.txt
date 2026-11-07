@@ -1,0 +1,9 @@
+# Training/export extras ONLY. The validate/ingest/split/evaluate CLIs and the
+# unittest suite are stdlib-only and need nothing installed.
+#
+#   pip install -r tools/dataset/requirements.txt
+#
+xgboost>=2.0
+onnx>=1.15
+onnxruntime>=1.17
+onnxmltools>=1.12

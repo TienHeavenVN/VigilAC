@@ -62,6 +62,9 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test --no-daemon --stacktrace
 
+      - name: Dataset pipeline unit tests (stdlib only)
+        run: python3 -m unittest discover -s tools/dataset/tests -v
+
       - name: Publish unit test results
         if: always()
         uses: dorny/test-reporter@v3
