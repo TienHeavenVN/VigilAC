@@ -24,8 +24,6 @@ import org.junit.jupiter.api.Test;
  */
 class BreakTimeModelHarvestTest {
 
-    private static final double NO_TAX = 0.0D;
-
     // ------------------------------------------------- wrong-tool speed applies? no. Divisor? it depends.
 
     @Test
@@ -123,7 +121,7 @@ class BreakTimeModelHarvestTest {
         // Wooden pickaxe + Efficiency II on obsidian: base 2.0 + (4 + 1) = 7.0;
         // it cannot harvest, so the divisor stays 100 ticks.
         // 50 × 100 / 7.0 = 714.29 ticks ≈ 35.714 s.
-        double ms = BreakTimeModel.expectedMillis(50.0D, true, false, true, true, 2.0D, 2, 0, NO_TAX, false, false, true);
+        double ms = BreakTimeModel.expectedMillis(50.0D, true, false, true, true, 2.0D, 2, 0, 0, false, false, true);
         assertEquals(35_714.29D, ms, 5.0D);
     }
 
