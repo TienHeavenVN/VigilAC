@@ -470,6 +470,7 @@ jobs:
         env:
           PACKETEVENTS: ${{ matrix.packetevents }}
           RUN_LATENCY_PASS: '1'
+          CAPTURE_CI: '1'
 
       - name: Upload live test results
         if: always()

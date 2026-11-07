@@ -30,6 +30,45 @@ fi
 
 cp "$(git rev-parse --show-toplevel)/build/libs/VigilAC.jar" plugins/VigilAC.jar
 
+if [ "${CAPTURE_CI:-0}" = "1" ]; then
+  # Consent-capture CI: boot the server with a capture-enabled config so the live
+  # harness can verify the corpus end-to-end. Generated fresh each run; the committed
+  # config.yml (capture disabled) is untouched. The pseudonym key is random per run.
+  mkdir -p plugins/VigilAC
+  TOPLEVEL="$(git rev-parse --show-toplevel)"
+  KEY=$(python3 -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())")
+  KEY="$KEY" TOPLEVEL="$TOPLEVEL" python3 - <<'PY'
+import os, re
+src = os.path.join(os.environ['TOPLEVEL'], 'src/main/resources/config.yml')
+dst = 'plugins/VigilAC/config.yml'
+text = open(src, encoding='utf-8').read()
+block = (
+    "capture:\n"
+    "  enabled: true\n"
+    "  scenario: ci-capture-consent\n"
+    "  label: LEGITIMATE\n"
+    "  label-source: SERVER_TELEMETRY_CURATION\n"
+    "  label-confidence: 0.9\n"
+    "  client-category: VANILLA\n"
+    "  input-category: MOUSE\n"
+    "  pseudonym-key: '" + os.environ['KEY'] + "'\n"
+    "  pseudonym-rotation-hours: 24\n"
+    "  interval-seconds: 1\n"
+    "  buffer-capacity: 64\n"
+    "  max-total-bytes: 268435456\n"
+    "  retention-days: 90\n"
+    "  notify-on-join: true\n"
+    "  provenance-note: 'ci-capture/1'\n"
+)
+pattern = re.compile(r'(?ms)^capture:.*?(?=^\S|\Z)')
+text2, n = pattern.subn(block, text, count=1)
+assert n == 1, 'capture section not found in committed config.yml'
+with open(dst, 'w', encoding='utf-8') as fh:
+    fh.write(text2)
+print('CAPTURE_CI=1 → capture-enabled config written to', dst)
+PY
+fi
+
 if [ "$PACKETEVENTS" = "1" ] && [ ! -s plugins/packetevents-spigot.jar ]; then
   PE_URL="https://github.com/retrooper/packetevents/releases/download/v2.14.0/packetevents-spigot-2.14.0.jar"
   echo "downloading packetevents from $PE_URL"

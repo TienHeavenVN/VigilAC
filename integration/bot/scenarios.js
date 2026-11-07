@@ -89,6 +89,34 @@ async function lookAndAttack(bot, entity) {
 
 // ---------- legitimate scenarios (physics ON) ----------
 
+// Consent-capture smoke: drives the real consent command path as the bot, generates
+// feature-nonzero combat telemetry, and revokes at the end. Scored as a probe
+// (UNABLE by design); the corpus itself is asserted by integration/run.sh when
+// CAPTURE_CI=1. Chat-command delivery for mineflayer is not independently verified on
+// this stack, so consent is ALSO granted via `execute as` rcon (idempotent) — the
+// command still executes as the player, exercising the real permission path.
+define('capture-consent-smoke', { kind: 'probe', description: 'consent-based capture: bot opts in, generates combat features, opts out. Consent via chat + rcon execute-as fallback; corpus verified in run.sh when CAPTURE_CI=1', expect: [] }, async (bot, api) => {
+  const name = api.result.username;
+  bot.chat('/vigilac capture consent');
+  const viaRcon = api.rcon(`execute as ${name} run vigilac capture consent`);
+  api.result.evidence.push(`consent requested (chat sent; rcon execute-as -> ${String(viaRcon).trim().slice(0, 80)})`);
+  await api.sleep(1500);
+  for (let i = 0; i < 4; i++) {
+    const z = await summonZombieNear(bot, api, { x: 2, z: 1 + (i % 2) }, name);
+    if (z) {
+      await bot.lookAt(z.position.offset(0, 1.0, 0), true);
+      attack(bot, z);
+      api.result.evidence.push('attacked zombie id=' + z.id);
+    }
+    await api.sleep(700);
+  }
+  await api.sleep(12000); // several 1s capture ticks fire while consented
+  bot.chat('/vigilac capture revoke');
+  const revokeRcon = api.rcon(`execute as ${name} run vigilac capture revoke`);
+  api.result.evidence.push(`revoke requested (chat sent; rcon execute-as -> ${String(revokeRcon).trim().slice(0, 80)})`);
+  await api.sleep(1000);
+});
+
 define('legit-stand', { kind: 'legit', description: 'stand still 5s', expect: [] }, async (bot, api) => {
   api.result.evidence.push('standing still 5s');
   await api.sleep(5000);

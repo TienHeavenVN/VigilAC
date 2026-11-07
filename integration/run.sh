@@ -94,6 +94,126 @@ if [ "${RUN_LATENCY_PASS:-0}" = "1" ] && sudo -n true 2>/dev/null; then
 fi
 
 echo "RCON tps: $(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci tps | tail -1)"
+CAPTURE_OK=1
+if [ "${CAPTURE_CI:-0}" = "1" ]; then
+  echo "== CAPTURE_CI: verifying consent corpus on disk =="
+  RESULTS_DIR="$RESULTS" SERVER_DIR="$SRV" python3 - <<'PY'
+import glob, json, os, re, sys
+
+results = os.environ['RESULTS_DIR']
+server_dir = os.environ['SERVER_DIR']
+corpus = glob.glob(os.path.join(server_dir, 'plugins', 'VigilAC', 'capture', 'corpus', 'capture-*.jsonl'))
+fail = []
+if not corpus:
+    fail.append('no corpus files under plugins/VigilAC/capture/corpus/')
+
+required = {'player_pseudonym', 'session_pseudonym', 'mc_version', 'client_category', 'input_category',
+            'tps_1m', 'ping_ms', 'feature_schema_hash', 'label', 'label_source', 'label_confidence',
+            'collected_utc', 'scenario', 'features'}
+allowed = required | {'provenance_note'}
+golden = '2f2b0a3eb4563552b5c995c285f7179ce34490c450c46b63e9dbc022916ee688'
+botname = None
+try:
+    with open(os.path.join(results, 'scenario-names.txt'), encoding='utf-8') as fh:
+        for line in fh:
+            parts = line.split()
+            if len(parts) == 2 and parts[0] == 'capture-consent-smoke':
+                botname = parts[1]
+except OSError:
+    pass
+if not botname:
+    fail.append('capture-consent-smoke bot name not found in scenario-names.txt')
+
+total = 0
+for path in corpus:
+    with open(path, encoding='utf-8') as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                continue
+            total += 1
+            try:
+                row = json.loads(line)
+            except Exception as exc:
+                fail.append('unparseable line in %s: %s' % (os.path.basename(path), exc))
+                continue
+            keys = set(row)
+            missing, extra = required - keys, keys - allowed
+            if missing:
+                fail.append('missing keys %s' % sorted(missing))
+            if extra:
+                fail.append('unexpected keys %s' % sorted(extra))
+            if not re.fullmatch(r'[0-9a-f]{32}', str(row.get('player_pseudonym', ''))):
+                fail.append('player_pseudonym is not 32-hex')
+            if not re.fullmatch(r'[0-9a-f]{32}', str(row.get('session_pseudonym', ''))):
+                fail.append('session_pseudonym is not 32-hex')
+            if row.get('feature_schema_hash') != golden:
+                fail.append('feature_schema_hash mismatch')
+            if row.get('label') != 'LEGITIMATE':
+                fail.append('label must be owner-declared LEGITIMATE, got: %r' % row.get('label'))
+            if row.get('label_source') != 'SERVER_TELEMETRY_CURATION':
+                fail.append('label_source mismatch')
+            if row.get('scenario') != 'ci-capture-consent':
+                fail.append('scenario mismatch')
+            if row.get('client_category') != 'VANILLA':
+                fail.append('client_category mismatch')
+            if not re.fullmatch(r'\d+\.\d+(\.\d+)?', str(row.get('mc_version', ''))):
+                fail.append('mc_version not X.Y[.Z]')
+            feats = row.get('features')
+            if not isinstance(feats, list) or len(feats) != 22:
+                fail.append('features must be a 22-element array')
+            elif not all(isinstance(x, (int, float)) and x == x and abs(x) != float('inf') for x in feats):
+                fail.append('features contain NaN/inf or non-numeric')
+            if botname and botname in json.dumps(row):
+                fail.append('row contains the consenting bot username!')
+
+if total == 0 and not fail:
+    fail.append('corpus files exist but contain zero rows')
+
+# consent store must exist and hold only opaque tokens
+consent_path = os.path.join(server_dir, 'plugins', 'VigilAC', 'capture', 'consent.json')
+if not os.path.isfile(consent_path):
+    fail.append('consent.json missing (consent was granted in the scenario)')
+else:
+    consent_text = open(consent_path, encoding='utf-8').read()
+    if botname and botname in consent_text:
+        fail.append('consent store contains the bot username')
+    if not re.fullmatch(r'(?s)\{.*[0-9a-f]{32}.*\}', consent_text.strip()):
+        fail.append('consent store does not look like the documented token file')
+
+if fail:
+    print('CAPTURE_CI FAIL:')
+    for item in fail[:20]:
+        print(' -', item)
+    sys.exit(1)
+print('CAPTURE_CI OK: %d rows across %d corpus file(s); schema hash, key set, pseudonyms and labels verified' % (total, len(corpus)))
+sys.exit(0)
+PY
+  cap_rc=$?
+  if [ $cap_rc -ne 0 ]; then
+    CAPTURE_OK=0
+    echo "::error title=CaptureCorpus::consent corpus verification failed (see above)"
+  else
+    echo "::notice title=CaptureCorpus::consent capture corpus verified (rows parse, 32-hex pseudonyms, schema hash, owner-declared label, no identifiers)"
+  fi
+  echo "== CAPTURE_CI: admin delete-all over RCON =="
+  DEL=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "vigilac capture delete-all confirm" | tail -1)
+  echo "delete-all -> $DEL"
+  if ls "$SRV"/plugins/VigilAC/capture/corpus/*.jsonl >/dev/null 2>&1; then
+    CAPTURE_OK=0
+    echo "::error title=CaptureDeleteAll::corpus files remain after 'vigilac capture delete-all confirm'"
+  elif [ -f "$SRV/plugins/VigilAC/capture/consent.json" ]; then
+    CAPTURE_OK=0
+    echo "::error title=CaptureDeleteAll::consent store remains after 'vigilac capture delete-all confirm'"
+  else
+    echo "::notice title=CaptureDeleteAll::corpus and consent store wiped by admin command"
+  fi
+  if [ "$CAPTURE_OK" = "1" ]; then
+    echo "::notice title=CaptureCI::consent capture lifecycle verified end-to-end on a real Paper server"
+  fi
+else
+  echo "== CAPTURE_CI not set — capture corpus verification skipped =="
+fi
 echo "== stopping server =="
 python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci stop > /dev/null 2>&1 || true
 for i in $(seq 1 30); do kill -0 "$(cat "$ROOT/integration/live.pid")" 2>/dev/null || break; sleep 2; done
@@ -159,3 +279,7 @@ else
 fi
 echo "RCON tps: $(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci tps | tail -1)"
 
+if [ "${CAPTURE_CI:-0}" = "1" ] && [ "$CAPTURE_OK" = "0" ]; then
+  echo "::error title=CaptureCI::consent capture verification FAILED — see annotations above"
+  exit 1
+fi
