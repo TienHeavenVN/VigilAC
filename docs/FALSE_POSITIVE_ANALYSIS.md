@@ -118,3 +118,47 @@ changed. Results of the rerun are pinned in LIVE_TEST_RESULTS.md.
 - `SpeedCheck` dt<45 ms backlog-burst guard (FP-2 fix), pinned by
   `SpeedCheckTest#backlogBurstDoesNotFabricateSpeed` / `sustainedSprintCheatStillFlags`.
 - Alert-only default, no auto-kicks, no check weakened for convenience.
+
+## FP-7 (root-caused, 2026-11-07 run 42334359016): 1.21.2+ server-side attack-cooldown drop — the second damage-event funnel
+
+**Symptom.** Even with immortal zombies (FP-6 fix), the combat scenarios in CI run
+`42334359016` delivered 396 (leg 0) / 397 (leg 1) `use_entity` attack packets over 12 s
+(~33 CPS) yet the plugin's attack listener saw only **~24–25 damage events per leg**
+(~2/s). The combat-cadence checks (`auto-clicker`, `aim-assist`) therefore never accrued
+VL: landed CPS ≈ 2 « cap 20.5; landed inter-arrival ≈ 500 ms ≫ snap-max-interval 120 ms,
+so the snap gate (`min-snap-streak = 4`) can never engage. VL readouts read `{}`.
+
+**Evidence (DIAG traces, `debug` gated, vl=0.0 — zero detection-logic impact):**
+
+```
+[auto-clicker] DIAG cps=1.00 samples=0 mean=NaN std=NaN yaw=0.0
+[auto-clicker] DIAG cps=3.90 samples=1 mean=513.0 std=0.0 yaw=-90.0
+[auto-clicker] DIAG cps=3.01 samples=2 mean=498.0 std=15.0 yaw=-90.0
+[aim-assist]  DIAG swing=-1.0 int=0 yaw=0.0 streak=0
+[aim-assist]  DIAG swing=95.8 int=0 yaw=-90.0 streak=0
+```
+
+Per-attack damage ≈ 1.0 (fist, full cooldown): 24 damage dealt / ~25 landed attacks.
+The zombie HP probe corroborated (1024.0 → ~1000.4 in 12 s). `kill-aura` and `reach`
+still fire — their gates (≥3 distinct targets in 1 s; excess distance) are not
+interval-capped the same way and accrue from the landed stream (observed callbacks:
+kill-aura 6–9/leg, reach leg 0 = 3/leg, leg 1 = 0/leg).
+
+**Mechanism.** Since 1.21.2 vanilla enforces the player's attack cooldown server-side:
+sub-cooldown attacks are silently dropped (no `EntityDamageByEntityEvent`, no damage).
+Bare-fist attack speed (4.0 → 0.25 s) and every sword (< 0.625 s) cap landed melee at
+≈ 2–4 hits/s for *any* player, honest or cheating.
+
+**Consequence for the checks (honest classification).** On 1.21.2+ stock servers, the
+`auto-clicker` cadence gate (20.5 CPS) and the `aim-assist` snap-interval gate (120 ms)
+are **unreachable via server-validated melee**. This is a design-era calibration finding,
+not a detection-logic defect introduced by Phase 4; detection logic was **not** changed.
+Recalibration against 1.21.2+ cooldown reality (e.g. snap-interval derivation, cadence
+gate re-derivation) is flagged as a Phase 5+ design input — see ROADMAP.md. The
+`kill-aura` check remains effective against multi-target rushes within the landed stream.
+
+**What was NOT done:** no threshold, gate, VL weight or decay was changed; no check was
+removed. The scenarios remain in the harness and honestly report FAIL ("expect:
+auto-clicker/aim-assist VL > 0" unmet) because the environment cannot deliver the
+required event stream. They are reclassified below as **Unable-to-trigger in CI**, not
+as broken detections.

@@ -1,5 +1,7 @@
 # VigilAC live-test results (Phase 3)
 
+> **Phase 4 addendum at the end of this file (2026-11-07).** The sections below are the Phase 3 record; the Phase 4 re-verification (DIAG traces, round-4 harness fixes, scaffold/fast-place now detecting, 26.x gates) is appended after §9.
+
 **Date:** 2026-11-06 · **Branch:** `arena/9ae3a67f-vigilac` · **Reference run:** [CI `42259047477`](https://github.com/TienHeavenVN/VigilAC/actions/runs/42259047477) (HEAD `0cfa22c`; build + 12-version compat + smoke + both live legs SUCCESS) · **Server:** Paper 1.21.8 STABLE (Fill v3, pinned build, sha256 verified in `integration/paper.sh`) on Java 21 · **Plugin:** VigilAC as built from the branch (`shadowJar`), alert-only mode (default; no punishment commands configured) · **Client:** custom headless protocol bot (mineflayer 1.21.8, offline mode) driven by `integration/bot/scenarios.js` · **Matrix:** PacketEvents installed (`packetevents 1`, packetevents 2.14.0) **and** absent (`packetevents 0`); all scenarios run on both legs · **Latency pass:** all `legit-*` scenarios re-run under `tc netem` 120 ms ± 30 ms on loopback.
 
 > **Honesty note — read this first.** The in-house protocol bot is **not** Meteor, LiquidBounce or Wurst. It is a scripted packet driver for verifying detection paths. Real-client verification is listed separately below and is **UNABLE-TO-TEST**. Nothing in this document claims those clients were tested. Likewise, no detection rate against real-world adversaries is claimed; results here describe an isolated, deterministic lab environment.
@@ -147,3 +149,44 @@ Both legs: pad anchor confirmed in every scenario log (`RCON pos -> ... 64.0d ..
 | No production-readiness claim without real-client evidence | **Done** — §1 | §1 |
 | Regression tests for confirmed bugs | **Done** (re-run per CI) | §7 |
 | Reproducible configs/scripts | **Done** — `integration/` (paper.sh, run.sh, scenarios.js, bots), pinned builds + sha256 | repo |
+
+---
+
+# Phase 4 addendum (2026-11-07) — live harness re-verified; DIAG traces; 26.x dual-artifact gates
+
+**Reference runs:** [`42334359016`](https://github.com/TienHeavenVN/VigilAC/actions/runs/42334359016) (HEAD `9f27e4a`, DIAG instrumentation) and [`42335380663`](https://github.com/TienHeavenVN/VigilAC/actions/runs/42335380663) (HEAD `9001058`, round-4 harness fixes + scoped bytecode gate). Server/client/method identical to §2–§3. Both legs (PacketEvents absent / 2.14.0) ran to completion; `ServerLog` annotations report **no VigilAC exception/severe lines** in either leg of either run.
+
+### What run 42334359016 settled (DIAG traces, debug-gated, vl=0.0 — detection logic untouched)
+
+| Scenario | DIAG observation | Consequence |
+|---|---|---|
+| `illegal-autoclick` | ~25 damage events per leg out of ~396 use_entity packets (~33 CPS sent → ~2 CPS landed); per-interval `std` irregular after server-side filtering; `mean ≈ 500 ms` | Vanilla **1.21.2+ attack-cooldown enforcement** drops sub-cooldown attacks server-side; no `EntityDamageByEntityEvent` → `auto-clicker`'s 20.5 CPS cap unreachable. Reclassified **unable-to-trigger** (see FALSE_POSITIVE_ANALYSIS FP-7). Not a plugin defect; no threshold was changed. |
+| `illegal-aimassist` | swing 90–96°, landed-attack intervals ≈ 500 ms (> 120 ms snap-max-interval), streak never built | `aim-assist` snap gate unreachable via server-validated melee. Reclassified **unable-to-trigger in CI**; HP moved 1024.0 → 1023.75 (partial-charge hits only). |
+| `illegal-scaffold` | `DIAG angle=17.6–49.3 yaw≈-45..-63.5 streak=0` — server saw the crosshair ON the target face the whole time | **Root cause: mineflayer `_genericPlace` force-aims at the clicked face** (`bot.lookAt`) unless `forceLook: 'ignore'`. An out-of-view placement can never occur via `bot.placeBlock`. Harness fixed (raw `_genericPlace(..., forceLook: 'ignore')`); see round 4. |
+| `illegal-fastplace` | `placed 12 blocks in 12.18 s` — two `blockUpdate … did not fire within timeout of 5000 ms` on (0,64,6)/(1,64,6) | The z=6 pillar row never received server block updates; 10 s of the 8 s budget burned on timeouts. Relocated to the z=5 row (verified working pattern). |
+| `illegal-overspeed` | leg 0: `illegal-overspeed:speed=10` callbacks (PASS); leg 1: zero callbacks — the forge was fully rejected this run | Overspeed is **flaky by construction**: Paper intermittently reverts 6.4 b/s deltas (event stream cancelled), producing zero evidence. Documented; not "fixed". |
+| `legit-sprint-jump` | speed EMA ema=5.43–7.06, cap=4.4, sprint=false, VL 3.76–3.93 | Same mineflayer/sprint-flag artifact as Phase 3; VL < alert-vl 5.0; no alert action. Unchanged. |
+
+### Round 4 (run 42335380663, HEAD `9001058`) — both legs, full grid
+
+| Leg | legit clean | illegal detected | unable | key callbacks (DebugDigest) |
+|---|---|---|---|---|
+| 0 (packetevents absent) | 15/16 (sprint-jump VL < 5.0) | **7/10** — timer=53, **scaffold=11**, **fast-place=9**, invalid-vertical=8, reach=3, kill-aura=4, fly=4 | 2 (no-fall, fast-break) | `illegal-fastplace:fast-place=9`, `illegal-scaffold:scaffold=11`, `illegal-fastplace:scaffold=23` |
+| 1 (packetevents installed) | 15/16 (sprint-jump VL 3.6) | **7/10** — timer=54, **scaffold=11**, **fast-place=9**, reach=6, invalid-vertical=8, kill-aura=4, fly=3 | 2 (no-fall, fast-break) | `illegal-scaffold:scaffold=11`, `illegal-fastplace:scaffold=23` |
+
+**New in round 4:** `scaffold` and `fast-place` now accrue detection callbacks in both legs (previously 0). The out-of-view placement geometry is finally honest: the away-look (yaw=90°) never moves, placements complete (`verified 8/8 dirt in world state`), and the check's angle gate sees what a scaffold cheat actually looks like. `fast-place` placements now complete at full speed in the z=5 row, clearing the 7.0/s × 2 s window gate.
+
+**Still open / unchanged (honest):**
+- `auto-clicker` and `aim-assist` — **unable-to-trigger on 1.21.2+** (FP-7). Both legs: ~24–25 attack events per 12 s barrage; VL {} at read; verdict FAIL by scorer (expect unmet). The checks remain unit-tested; recalibration flagged for Phase 5+ (see ROADMAP.md).
+- `illegal-overspeed` — flaky (zero callbacks this run; leg 0 of 42334359016 detected). Harness limit, not a check regression.
+- `no-fall`, `fast-break` — UNABLE-TO-TEST (unchanged).
+- `sprint-jump` trace VL 3.6–3.93 — mineflayer artifact, below alert VL, no action.
+- Detection rate vs real adversaries — not claimed (see §1, UNABLE-TO-TEST).
+
+### 26.x dual-artifact gates (Phase 4 §10) — **PASS in CI**
+
+Run 42335380663 (artifact job `Build VigilAC-26x artifact (JDK 25)`, SHA-256 published as `VigilAC-26x.jar.sha256`):
+- Compat (compile + full unit suite on JDK 25 toolchain): **26.1.2 / 26.2 / 26.3 all green**.
+- Runtime smoke (real server boots on JDK 25, plugin enable marker + RCON command + clean disable): **26.1.2 / 26.2 / 26.3 all green**. The same lowest-supported artifact (built against paper-api 26.1.2.build.74-stable) booted on all three runtimes — cross-minor binary compatibility verified empirically.
+- Bytecode baseline re-scoped to its actual intent: `ac/vigil/**` classes must be ≥ 69 (Java 25); bundled deps floored at 52 (sqlite-jdbc is Java 8 bytecode). Prints full version histograms. All prior `min(all classes) < 69` red was this false positive.
+- 1.21.x world remains `VigilAC.jar` on JDK 21 (all 11 compat legs green; 1.21.8 smoke green). **26.1 and 26.1.1 remain UNSUPPORTED** (paper-api artifacts unresolvable; see COMPATIBILITY.md); **1.21.2 remains UNSUPPORTED**.

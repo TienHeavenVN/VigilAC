@@ -1,6 +1,6 @@
 # VigilAC
 
-A production-oriented anti-cheat plugin for **Paper** servers — **Minecraft 1.21.x**, Java **21**.
+A production-oriented anti-cheat plugin for **Paper** servers — **Minecraft 1.21.x** (Java **21**, `VigilAC.jar`) and **Minecraft 26.x** (Java **25**, `VigilAC-26x.jar`).
 
 VigilAC detects cheating with **real detection logic** — no placeholder checks, no fake thresholds,
 no suppression flags. Every check documents its algorithm, its false-positive analysis and its
@@ -24,12 +24,14 @@ intentionally not implemented.
 
 ## Requirements
 
-- Paper **1.21.x** (see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the tested matrix), Java **21**
+- **1.21.x line:** Paper 1.21.x (see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the tested matrix — 1.21.2 unsupported), Java **21**, `VigilAC.jar`
+- **26.x line:** Paper 26.1.2 / 26.2 / 26.3 (26.1 and 26.1.1 unsupported), Java **25**, `VigilAC-26x.jar`
+- The two artifacts are not interchangeable (bytecode major 65 vs 69).
 - Optional: [packetevents](https://github.com/retrooper/packetevents) plugin — enables `/vigilac info` packet throughput metrics. All checks work without it.
 
 ## Installation
 
-1. Download `VigilAC.jar` (build it yourself, see below, or from CI artifacts — includes a `.sha256` checksum).
+1. Download the artifact matching your server (build it yourself, see below, or from CI artifacts — each includes a `.sha256` checksum): `VigilAC.jar` for 1.21.x, `VigilAC-26x.jar` for 26.x.
 2. Put it in your server's `plugins/` directory.
 3. Restart the server; watch your console for `VigilAC enabled: 12 checks registered`.
 4. Edit `plugins/VigilAC/config.yml`. Start with defaults (`mode: alert-only`) and watch alerts for a few days.
@@ -40,11 +42,13 @@ See [docs/INSTALLATION.md](docs/INSTALLATION.md) for the full guide and the head
 ## Building
 
 ```bash
-./gradlew build            # unit tests + shaded JAR with the SQLite driver
+./gradlew build            # unit tests + shaded JAR with the SQLite driver (JDK 21)
 ./gradlew build -PpaperApiVersion=1.21.4-R0.1-SNAPSHOT   # build against a specific 1.21.x API
+# 26.x artifact (Gradle daemon on JDK 21, toolchain on JDK 25):
+./gradlew shadowJar -PpaperApiVersion=26.1.2.build.74-stable -PjavaRelease=25 -PartifactName=VigilAC-26x
 ```
 
-Produces `build/libs/VigilAC.jar`. Dependencies resolve from repositories declared in
+Produces `build/libs/VigilAC.jar` (26.x: `build/libs/VigilAC-26x.jar`). Dependencies resolve from repositories declared in
 `settings.gradle.kts` (papermc.io, CodeMC, Maven Central) — no mirrors, no TLS bypasses.
 
 ## Commands
