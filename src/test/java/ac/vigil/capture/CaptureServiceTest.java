@@ -228,7 +228,8 @@ class CaptureServiceTest {
         UUID player = UUID.randomUUID();
         trackedWithAttacks(players, player, now.get());
         service.onLogin(player);
-        assertTrue(service.consentGrant(player), "consent API still answers, but no rows flow");
+        // when capture refuses to arm, consent cannot be recorded and the player is told so
+        assertFalse(service.consentGrant(player), "consent must be refused while capture is not armed");
         service.tick();
         service.stop();
         assertEquals(0, service.status().rowsWritten());

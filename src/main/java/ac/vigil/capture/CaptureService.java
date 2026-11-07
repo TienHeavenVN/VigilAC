@@ -65,6 +65,12 @@ public final class CaptureService {
     private volatile boolean started;
     private volatile String mcVersion;
     private volatile long rowsSkippedInvalid;
+    // Snapshot taken in stop() so /vigilac capture status stays truthful after shutdown.
+    private long lastRowsWritten;
+    private long lastBytesWritten;
+    private long lastQuotaDropped;
+    private long lastBufferDroppedFull;
+    private String lastHaltedReason;
 
     public CaptureService(Logger logger, ConfigSource source, PlayerDataManager players,
                           DoubleSupplier tpsSupplier, LongSupplier clock, Supplier<String> mcVersionSupplier) {
@@ -81,6 +87,7 @@ public final class CaptureService {
         if (started) {
             return;
         }
+        this.dataDir = dataDir.resolve("capture").resolve("corpus");
         started = true;
         if (!config.enabled()) {
             logger.info("[capture] disabled by config (capture.enabled=false) — nothing is recorded.");
@@ -104,9 +111,8 @@ public final class CaptureService {
         this.pseudonymizer = new CapturePseudonymizer(config.pseudonymKey(), config.pseudonymRotationHours());
         this.consent = new CaptureConsent(dataDir, pseudonymizer);
         this.consent.load();
-        Path outputDir = dataDir.resolve("capture").resolve("corpus");
         this.buffer = new CaptureBuffer(config.bufferCapacity());
-        this.writer = new CaptureWriter(outputDir, config.maxTotalBytes(), buffer, clock);
+        this.writer = new CaptureWriter(this.dataDir, config.maxTotalBytes(), buffer, clock);
         int purged = this.writer.purgeOlderThan(config.retentionDays(), clock.getAsLong());
         this.writer.start();
         for (String io : writer.ioProblems()) {
@@ -131,7 +137,14 @@ public final class CaptureService {
             for (String io : writer.ioProblems()) {
                 logger.warning("[capture] " + io);
             }
+            lastRowsWritten = writer.rowsWritten();
+            lastBytesWritten = writer.bytesWritten();
+            lastQuotaDropped = writer.quotaDropped();
+            lastHaltedReason = writer.haltedReason();
             writer = null;
+        }
+        if (buffer != null) {
+            lastBufferDroppedFull = buffer.droppedFull();
         }
         started = false;
     }
@@ -177,26 +190,48 @@ public final class CaptureService {
         return isReady() && config.notifyOnJoin() && consent != null && !consent.hasConsent(playerId);
     }
 
-    /** Admin: purge day-files older than the retention window. Returns files purged. */
+    /** Admin: purge day-files older than the retention window. Works even after stop(). */
     public int purgeOldFiles() {
-        if (writer == null) {
-            return 0;
-        }
-        return writer.purgeOlderThan(config.retentionDays(), clock.getAsLong());
+        return writerForHousekeeping().purgeOlderThan(config.retentionDays(), clock.getAsLong());
     }
 
-    /** Admin: stop, delete the whole corpus and the consent store. Returns corpus files deleted. */
+    /**
+     * Admin: stop the capture, then delete the whole corpus and the consent store. Works regardless of
+     * lifecycle state. The capture is disarmed after this call — nothing is recorded again until
+     * the plugin restarts (consent would have to be re-granted by every player).
+     */
     public int deleteAll() {
-        if (writer == null) {
-            return 0;
-        }
-        int corpusFiles = writer.deleteAll();
+        stop(); // drain, close the writer, snapshot counters — no rows may be in flight during the wipe
+        int corpusFiles = writerForHousekeeping().deleteAll();
         if (consent != null) {
             consent.deleteAll();
         }
+        lastRowsWritten = 0L;
+        lastBytesWritten = 0L;
+        lastQuotaDropped = 0L;
+        lastBufferDroppedFull = 0L;
+        lastHaltedReason = null;
+        rowsSkippedInvalid = 0L;
+        buffer = null;
         sessionPseudonyms.clear();
         return corpusFiles;
     }
+
+    /**
+     * Returns the live writer when running, or a detached housekeeping writer pointed at the
+     * same corpus directory when stopped. Housekeeping (purge/delete-all) must not depend on
+     * the capture being armed.
+     */
+    private CaptureWriter writerForHousekeeping() {
+        CaptureWriter live = writer;
+        if (live != null) {
+            return live;
+        }
+        Path outputDir = dataDir != null ? dataDir : Path.of("plugins", "VigilAC", "capture", "corpus");
+        return new CaptureWriter(outputDir, 1L << 40, new CaptureBuffer(1), clock);
+    }
+
+    private Path dataDir;
 
     private String safeVersion() {
         try {
@@ -271,14 +306,32 @@ public final class CaptureService {
         if (!config.enabled()) {
             notes = List.of("disabled (capture.enabled=false) — nothing is recorded");
         }
+        boolean halted;
+        String haltReason;
+        long rows;
+        long quotaDropped;
+        long bytes;
+        if (writer != null) {
+            halted = writer.haltedReason() != null;
+            haltReason = writer.haltedReason();
+            rows = writer.rowsWritten();
+            quotaDropped = writer.quotaDropped();
+            bytes = writer.bytesWritten();
+        } else {
+            halted = lastHaltedReason != null;
+            haltReason = lastHaltedReason;
+            rows = lastRowsWritten;
+            quotaDropped = lastQuotaDropped;
+            bytes = lastBytesWritten;
+        }
         return new CaptureStatus(config.enabled(), isReady(),
-                writer != null && writer.haltedReason() != null,
-                writer == null ? null : writer.haltedReason(),
-                writer == null ? 0 : writer.rowsWritten(),
+                halted,
+                haltReason,
+                rows,
                 rowsSkippedInvalid,
-                buffer == null ? 0 : buffer.droppedFull(),
-                writer == null ? 0 : writer.quotaDropped(),
-                writer == null ? 0 : writer.bytesWritten(),
+                buffer == null ? lastBufferDroppedFull : buffer.droppedFull(),
+                quotaDropped,
+                bytes,
                 config.maxTotalBytes(),
                 buffer == null ? 0 : buffer.size(),
                 consent == null ? 0 : consent.count(),
