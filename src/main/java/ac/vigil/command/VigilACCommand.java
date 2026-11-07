@@ -328,8 +328,8 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
                 default -> "&a";
             };
             StringBuilder line = new StringBuilder(String.format(java.util.Locale.US,
-                    "&7  %s: %s%s &7vl=&e%.2f &7conf=&e%.2f &7evidence=&e%d &7last=&e%s",
-                    name, stateColor, status.state(), vl, status.confidence(), status.evidenceCount(),
+                    "&7  %s: %s%s &7vl=&e%.2f &7conf=&e%.2f &7corr=&e%s &7evidence=&e%d &7last=&e%s",
+                    name, stateColor, status.state(), vl, status.confidence(), status.correlationStatus(), status.evidenceCount(),
                     ageText(now, status.lastDetectionAt())));
             if (status.lastEvidenceAt() > 0L) {
                 line.append(" &7ev=&e").append(ageText(now, status.lastEvidenceAt()))

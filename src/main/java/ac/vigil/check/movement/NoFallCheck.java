@@ -150,6 +150,7 @@ public final class NoFallCheck implements Check<DetectionContext> {
             }
         }
         if (unsupported) {
+            data.monitor().noteCorrelation(getName(), ac.vigil.monitor.CorrelationStatus.CONFIRMED);
             data.monitor().noteCheckEvidence(getName(), String.format(java.util.Locale.US,
                     "probe=unsupported descent=%.2f pos=(%.2f,%.2f,%.2f)", descent, ctx.getToX(), ctx.getToY(), ctx.getToZ()));
             tracker.resetSuspiciousLandings();
@@ -166,6 +167,7 @@ public final class NoFallCheck implements Check<DetectionContext> {
         // correlation's suppressing list never gates VL — only server facts
         // with their own grace windows may excuse a landing.
         ac.vigil.monitor.CorrelationResult corr = correlation.correlateNoFall(data.monitor(), descent, minFallDistance);
+        data.monitor().noteCorrelation(getName(), corr.status());
 
         int streak = tracker.addSuspiciousLanding();
         data.monitor().noteNoFallSuspiciousLanding(String.format(
@@ -176,9 +178,9 @@ public final class NoFallCheck implements Check<DetectionContext> {
 
         double amount = vlPerLanding * Math.min(2.0D, descent / minFallDistance);
         String debug = String.format(java.util.Locale.US,
-                "fallDistance=%.2f sinceFallDamage=%dms streak=%d corr=%.2f supporting=%s ping=%d tps=%.2f",
+                "fallDistance=%.2f sinceFallDamage=%dms streak=%d corr=%.2f status=%s supporting=%s ping=%d tps=%.2f",
                 descent, data.monitor().lastFallDamageAt() > 0L ? sinceFallDamage : -1L, streak,
-                corr.confidence(), corr.supporting(),
+                corr.confidence(), corr.status(), corr.supporting(),
                 ctx.getPingMillis(), ctx.getServerTps());
         callback.onViolation(this, amount, debug);
     }

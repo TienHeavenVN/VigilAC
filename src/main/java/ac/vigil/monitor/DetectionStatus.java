@@ -20,10 +20,18 @@ public final class DetectionStatus {
     private final long exemptionAt;
     private final long lastEvidenceAt;
     private final String lastEvidenceDetail;
+    private final String correlationStatus;
 
     public DetectionStatus(String check, DetectionState state, double violationLevel, double confidence,
                            long lastDetectionAt, long evidenceCount, String exemptionReason, long exemptionAt,
                            long lastEvidenceAt, String lastEvidenceDetail) {
+        this(check, state, violationLevel, confidence, lastDetectionAt, evidenceCount, exemptionReason,
+                exemptionAt, lastEvidenceAt, lastEvidenceDetail, "inconclusive");
+    }
+
+    public DetectionStatus(String check, DetectionState state, double violationLevel, double confidence,
+                           long lastDetectionAt, long evidenceCount, String exemptionReason, long exemptionAt,
+                           long lastEvidenceAt, String lastEvidenceDetail, String correlationStatus) {
         this.check = check;
         this.state = state;
         this.violationLevel = violationLevel;
@@ -34,6 +42,7 @@ public final class DetectionStatus {
         this.exemptionAt = exemptionAt;
         this.lastEvidenceAt = lastEvidenceAt;
         this.lastEvidenceDetail = lastEvidenceDetail == null ? "" : lastEvidenceDetail;
+        this.correlationStatus = correlationStatus == null ? "inconclusive" : correlationStatus;
     }
 
     public String check() { return check; }
@@ -50,4 +59,7 @@ public final class DetectionStatus {
 
     /** Detail of the most recent CHECK_EVIDENCE entry for this check, or "". */
     public String lastEvidenceDetail() { return lastEvidenceDetail; }
+
+    /** CONFIRMED/SUSPECTED/INCONCLUSIVE for the latest correlated verdict of this check. */
+    public String correlationStatus() { return correlationStatus; }
 }

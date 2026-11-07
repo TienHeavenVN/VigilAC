@@ -242,6 +242,13 @@ public final class PlayerMonitor {
         st.confidence = st.confidence + 0.5D * (target - st.confidence);
     }
 
+    /** Records the latest correlation verdict for a check (CONFIRMED/SUSPECTED/INCONCLUSIVE). */
+    public synchronized void noteCorrelation(String check, CorrelationStatus status) {
+        CheckStatus st = statuses.computeIfAbsent(check, k -> new CheckStatus());
+        st.correlationStatus = status == null ? CorrelationStatus.INCONCLUSIVE.name().toLowerCase()
+                : status.name().toLowerCase();
+    }
+
     /** Notes that check {@code check} abstained for an environmental reason. */
     public synchronized void noteExemption(String check, String reason) {
         CheckStatus st = statuses.computeIfAbsent(check, k -> new CheckStatus());
@@ -289,8 +296,9 @@ public final class PlayerMonitor {
         } else {
             state = DetectionState.CLEAR;
         }
+        String correlationStatus = st == null ? "inconclusive" : st.correlationStatus;
         return new DetectionStatus(check, state, vl, confidence, lastDetectionAt, evidenceCount,
-                exemptionReason, exemptionAt, lastEvidenceAt, lastEvidenceDetail);
+                exemptionReason, exemptionAt, lastEvidenceAt, lastEvidenceDetail, correlationStatus);
     }
 
     // ------------------------------------------------------------ queries
@@ -353,5 +361,6 @@ public final class PlayerMonitor {
         double confidence;
         String exemptionReason = "";
         long exemptionAt;
+        String correlationStatus = "inconclusive";
     }
 }

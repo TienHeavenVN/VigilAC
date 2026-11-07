@@ -72,3 +72,44 @@ class CorrelationEngineTest {
         assertTrue(result.suppressing().isEmpty());
     }
 }
+
+class CorrelationStatusTest {
+
+    @org.junit.jupiter.api.Test
+    void classificationTriState() {
+        assertEquals(ac.vigil.monitor.CorrelationStatus.CONFIRMED,
+                ac.vigil.monitor.CorrelationResult.classify(java.util.List.of("a", "b"), java.util.List.of()));
+        assertEquals(ac.vigil.monitor.CorrelationStatus.SUSPECTED,
+                ac.vigil.monitor.CorrelationResult.classify(java.util.List.of("a"), java.util.List.of()));
+        assertEquals(ac.vigil.monitor.CorrelationStatus.INCONCLUSIVE,
+                ac.vigil.monitor.CorrelationResult.classify(java.util.List.of(), java.util.List.of()));
+        // suppression always wins, even with many supporting signals
+        assertEquals(ac.vigil.monitor.CorrelationStatus.INCONCLUSIVE,
+                ac.vigil.monitor.CorrelationResult.classify(java.util.List.of("a", "b", "c"), java.util.List.of("teleport")));
+    }
+
+    @org.junit.jupiter.api.Test
+    void resultCarriesStatus() {
+        ac.vigil.monitor.CorrelationResult r = new ac.vigil.monitor.CorrelationResult(
+                0.5D, java.util.List.of("descent", "streak"), java.util.List.of());
+        assertEquals(ac.vigil.monitor.CorrelationStatus.CONFIRMED, r.status());
+        ac.vigil.monitor.CorrelationResult r2 = new ac.vigil.monitor.CorrelationResult(
+                0.0D, java.util.List.of("descent", "streak"), java.util.List.of("fall damage"));
+        assertEquals(ac.vigil.monitor.CorrelationStatus.INCONCLUSIVE, r2.status());
+    }
+}
+
+class CorrelationMonitorPropagationTest {
+
+    @org.junit.jupiter.api.Test
+    void correlationStatusPropagatesIntoDetectionStatus() {
+        java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong(1_000_000L);
+        PlayerMonitor monitor = new PlayerMonitor(now::get);
+        monitor.noteCorrelation("no-fall", CorrelationStatus.CONFIRMED);
+        DetectionStatus status = monitor.status("no-fall", 1.0D, 10.0D, true);
+        assertEquals("confirmed", status.correlationStatus());
+
+        DetectionStatus other = monitor.status("fly", 0.0D, 10.0D, true);
+        assertEquals("inconclusive", other.correlationStatus(), "checks never correlated report inconclusive");
+    }
+}
