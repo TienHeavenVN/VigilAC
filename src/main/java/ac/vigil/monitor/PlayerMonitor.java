@@ -153,9 +153,14 @@ public final class PlayerMonitor {
                 String.format(java.util.Locale.US, "speed=%.3f", speed));
     }
 
-    /** Records an EntityDamageEvent, separated by cause. */
+    /** Records an EntityDamageEvent, separated by cause (timestamp from the injected clock). */
     public synchronized void noteDamage(boolean fall) {
-        long now = clock.getAsLong();
+        noteDamage(fall, clock.getAsLong());
+    }
+
+    /** Records an EntityDamageEvent at an explicit timestamp (keeps tests deterministic). */
+    public synchronized void noteDamage(boolean fall, long timestamp) {
+        long now = timestamp;
         if (fall) {
             lastFallDamageAt = now;
             evidence.add(now, EvidenceType.DAMAGE_FALL, 1.0D, Evidence.SOURCE_SERVER, "cause=FALL");
@@ -206,8 +211,14 @@ public final class PlayerMonitor {
     /** Records generic check evidence (call alongside a VL callback, or vl == 0 diagnostics). */
     public synchronized void noteCheckEvidence(String check, String detail) {
         long now = clock.getAsLong();
-        evidence.add(now, EvidenceType.CHECK_EVIDENCE, 1.0D, Evidence.SOURCE_MONITOR,
-                (check == null ? "" : check + ": ") + (detail == null ? "" : detail));
+        evidence.add(new Evidence(now, EvidenceType.CHECK_EVIDENCE, 1.0D, Evidence.SOURCE_MONITOR,
+                detail == null ? "" : detail, check == null ? "" : check));
+    }
+
+    /** Records an inventory click observation (view type in detail). */
+    public synchronized void noteInventoryClick(String detail) {
+        evidence.add(clock.getAsLong(), EvidenceType.INVENTORY_CLICK, 1.0D, Evidence.SOURCE_SERVER,
+                detail == null ? "" : detail);
     }
 
     // --------------------------------------------------- detection status
@@ -249,6 +260,16 @@ public final class PlayerMonitor {
         String exemptionReason = st == null ? "" : st.exemptionReason;
         long exemptionAt = st == null ? 0L : st.exemptionAt;
 
+        // Per-check evidence history: scan the bounded ring once (O(capacity)).
+        long lastEvidenceAt = 0L;
+        String lastEvidenceDetail = "";
+        for (Evidence e : evidence.snapshot()) {
+            if (e.type() == EvidenceType.CHECK_EVIDENCE && e.check().equals(check)) {
+                lastEvidenceAt = e.timeMillis();
+                lastEvidenceDetail = e.detail();
+            }
+        }
+
         DetectionState state;
         if (!enabled) {
             state = DetectionState.DISABLED;
@@ -263,7 +284,7 @@ public final class PlayerMonitor {
             state = DetectionState.CLEAR;
         }
         return new DetectionStatus(check, state, vl, confidence, lastDetectionAt, evidenceCount,
-                exemptionReason, exemptionAt);
+                exemptionReason, exemptionAt, lastEvidenceAt, lastEvidenceDetail);
     }
 
     // ------------------------------------------------------------ queries

@@ -18,9 +18,12 @@ public final class DetectionStatus {
     private final long evidenceCount;
     private final String exemptionReason;
     private final long exemptionAt;
+    private final long lastEvidenceAt;
+    private final String lastEvidenceDetail;
 
     public DetectionStatus(String check, DetectionState state, double violationLevel, double confidence,
-                           long lastDetectionAt, long evidenceCount, String exemptionReason, long exemptionAt) {
+                           long lastDetectionAt, long evidenceCount, String exemptionReason, long exemptionAt,
+                           long lastEvidenceAt, String lastEvidenceDetail) {
         this.check = check;
         this.state = state;
         this.violationLevel = violationLevel;
@@ -29,6 +32,8 @@ public final class DetectionStatus {
         this.evidenceCount = evidenceCount;
         this.exemptionReason = exemptionReason == null ? "" : exemptionReason;
         this.exemptionAt = exemptionAt;
+        this.lastEvidenceAt = lastEvidenceAt;
+        this.lastEvidenceDetail = lastEvidenceDetail == null ? "" : lastEvidenceDetail;
     }
 
     public String check() { return check; }
@@ -39,4 +44,10 @@ public final class DetectionStatus {
     public long evidenceCount() { return evidenceCount; }
     public String exemptionReason() { return exemptionReason; }
     public long exemptionAt() { return exemptionAt; }
+
+    /** Timestamp of the most recent CHECK_EVIDENCE entry for this check, or 0 if none in the ring. */
+    public long lastEvidenceAt() { return lastEvidenceAt; }
+
+    /** Detail of the most recent CHECK_EVIDENCE entry for this check, or "". */
+    public String lastEvidenceDetail() { return lastEvidenceDetail; }
 }

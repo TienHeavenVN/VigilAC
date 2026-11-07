@@ -53,6 +53,21 @@ class DetectionStatusTest {
     }
 
     @Test
+    void lastEvidenceIsExposedPerCheck() {
+        monitor.noteCheckEvidence("speed", "ema=6.1 cap=5.61 sustained=4 ticks");
+        monitor.noteCheckEvidence("fly", "hover 41 ticks");
+        DetectionStatus speed = monitor.status("speed", 0.0D, 5.0D, true);
+        DetectionStatus fly = monitor.status("fly", 0.0D, 5.0D, true);
+        assertEquals("ema=6.1 cap=5.61 sustained=4 ticks", speed.lastEvidenceDetail());
+        assertEquals("hover 41 ticks", fly.lastEvidenceDetail());
+        assertTrue(speed.lastEvidenceAt() > 0L);
+        assertTrue(fly.lastEvidenceAt() >= speed.lastEvidenceAt());
+        DetectionStatus other = monitor.status("no-fall", 0.0D, 5.0D, true);
+        assertEquals("", other.lastEvidenceDetail());
+        assertEquals(0L, other.lastEvidenceAt());
+    }
+
+    @Test
     void confidenceIsMonotoneTowardVlRatio() {
         monitor.noteViolation("speed", 5.0D, 5.0D); // target 1.0
         double first = monitor.status("speed", 5.0D, 5.0D, true).confidence();

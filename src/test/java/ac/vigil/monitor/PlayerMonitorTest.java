@@ -105,6 +105,24 @@ class PlayerMonitorTest {
     }
 
     @Test
+    void inventoryClicksAreCountedAsEvidence() {
+        monitor.noteInventoryClick("CHEST");
+        now.addAndGet(10);
+        monitor.noteInventoryClick("PLAYER");
+        assertEquals(2, monitor.countEvidenceSince(EvidenceType.INVENTORY_CLICK, 0L));
+    }
+
+    @Test
+    void checkEvidenceCarriesCheckScope() {
+        monitor.noteCheckEvidence("no-fall", "descent=6.1 streak=3 corr=0.98");
+        var snapshot = monitor.evidenceSnapshot();
+        assertEquals(1, snapshot.size());
+        Evidence evidence = snapshot.get(0);
+        assertEquals("no-fall", evidence.check());
+        assertEquals(EvidenceType.CHECK_EVIDENCE, evidence.type());
+    }
+
+    @Test
     void totalObservationsCounted() {
         for (int i = 0; i < 25; i++) {
             now.addAndGet(50);

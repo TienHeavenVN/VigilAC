@@ -32,11 +32,20 @@ fixed-size scalars or short strings; updating the block is O(1) with one allocat
 
 The monitor records **events**, never per-tick snapshots: ground transitions, landings with
 descent, suspicious landings, teleports, velocity impulses, world changes, damage by cause,
-attacks, block place/break, impossible breaks and check evidence. Each entry carries a
-timestamp, a type, a confidence in [0, 1], a source (`server` / `client` / `monitor`) and a
-detail string. Storage is a per-player `ArrayDeque` ring — at most **256 entries** with a
+attacks, block place/break, impossible breaks, inventory clicks (view type only, bounded,
+O(1) per click) and check evidence. Each entry carries a
+timestamp, a type, a confidence in [0, 1], a source (`server` / `client` / `monitor`), a detail
+string and — for check-scoped entries — the producing check's name. Storage is a per-player `ArrayDeque` ring — at most **256 entries** with a
 **90 s TTL** — so memory is O(capacity), queries are O(capacity) worst-case, and the store is
 freed with the player (`PlayerData` is discarded on quit).
+
+### Per-check evidence history
+
+`DetectionStatus` exposes, per check: live VL (supplied at render time), confidence, total
+evidence count, last-detection timestamp, and the detail/timestamp of the most recent
+`CHECK_EVIDENCE` entry for that check (read from the bounded ring at render time — O(capacity),
+only when the command runs). `/vigilac monitor <player>` renders all of it plus the raw packet
+rate and the six newest evidence entries.
 
 ### Detection status (per check, per player)
 

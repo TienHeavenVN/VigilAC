@@ -290,8 +290,9 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
                 flags.toString().trim(), monitor.pingEma(), monitor.velocityHorizontalEma(), monitor.velocityVerticalEma())));
 
         sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
-                "&7  observations=&e%d&7 evidence=&e%d&7(cap %d)",
-                monitor.totalObservations(), monitor.evidenceCount(), ac.vigil.monitor.EvidenceStore.DEFAULT_CAPACITY)));
+                "&7  observations=&e%d&7 packets=&e%.1f/s&7 evidence=&e%d&7(cap %d)",
+                monitor.totalObservations(), data.getPacketsPerSecond(),
+                monitor.evidenceCount(), ac.vigil.monitor.EvidenceStore.DEFAULT_CAPACITY)));
 
         double lastDescent = monitor.lastLandingDescent();
         sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
@@ -330,6 +331,10 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
                     "&7  %s: %s%s &7vl=&e%.2f &7conf=&e%.2f &7evidence=&e%d &7last=&e%s",
                     name, stateColor, status.state(), vl, status.confidence(), status.evidenceCount(),
                     ageText(now, status.lastDetectionAt())));
+            if (status.lastEvidenceAt() > 0L) {
+                line.append(" &7ev=&e").append(ageText(now, status.lastEvidenceAt()))
+                        .append("&7: ").append(truncate(status.lastEvidenceDetail(), 48));
+            }
             if (!status.exemptionReason().isEmpty()) {
                 line.append(" &7[exempt: &b").append(status.exemptionReason()).append("&7]");
             }
@@ -342,13 +347,21 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.colorize("&7  recent evidence (newest last, max 6):"));
             for (int i = recent.size() - 1; i >= 0 && shown < 6; i--) {
                 ac.vigil.monitor.Evidence e = recent.get(i);
+                String tag = e.check().isEmpty() ? e.type().name() : e.type().name() + "/" + e.check();
                 sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
                         "&7    [%s] %s conf=%.2f src=%s %s",
-                        ageText(now, e.timeMillis()), e.type(), e.confidence(), e.source(),
-                        e.detail().length() > 64 ? e.detail().substring(0, 64) + "..." : e.detail())));
+                        ageText(now, e.timeMillis()), tag, e.confidence(), e.source(),
+                        truncate(e.detail(), 64))));
                 shown++;
             }
         }
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() > max ? value.substring(0, max) + "..." : value;
     }
 
     private static String ageText(long now, long timestamp) {

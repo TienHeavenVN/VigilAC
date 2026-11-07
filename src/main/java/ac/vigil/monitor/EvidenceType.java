@@ -32,5 +32,7 @@ public enum EvidenceType {
     /** A break whose inter-completion interval was below the vanilla lower bound. */
     FAST_BREAK_IMPOSSIBLE,
     /** A check recorded evidence (delta > 0 VL, or diagnostic evidence at vl == 0). */
-    CHECK_EVIDENCE
+    CHECK_EVIDENCE,
+    /** Inventory click observation (view type in detail); context for inventory-related analysis. */
+    INVENTORY_CLICK
 }

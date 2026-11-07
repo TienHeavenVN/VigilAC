@@ -63,9 +63,9 @@ class NoFallCheckTest {
             check.evaluate(airborne(-1.0D, now), data, sink());
         }
         if (damageOnLanding == 1) {
-            data.monitor().noteDamage(true); // FALL damage: exculpatory
+            data.monitor().noteDamage(true, now); // FALL damage: exculpatory
         } else if (damageOnLanding == 2) {
-            data.monitor().noteDamage(false); // non-FALL damage: must NOT excuse
+            data.monitor().noteDamage(false, now); // non-FALL damage: must NOT excuse
         }
         now += 50L;
         check.evaluate(grounded(now), data, sink());

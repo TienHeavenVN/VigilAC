@@ -17,13 +17,20 @@ public final class Evidence {
     private final double confidence;
     private final String source;
     private final String detail;
+    private final String check;
 
     public Evidence(long timeMillis, EvidenceType type, double confidence, String source, String detail) {
+        this(timeMillis, type, confidence, source, detail, "");
+    }
+
+    public Evidence(long timeMillis, EvidenceType type, double confidence, String source, String detail,
+                    String check) {
         this.timeMillis = timeMillis;
         this.type = type;
         this.confidence = Math.max(0.0D, Math.min(1.0D, confidence));
         this.source = source == null ? SOURCE_MONITOR : source;
         this.detail = detail == null ? "" : detail;
+        this.check = check == null ? "" : check;
     }
 
     public long timeMillis() { return timeMillis; }
@@ -31,6 +38,9 @@ public final class Evidence {
     public double confidence() { return confidence; }
     public String source() { return source; }
     public String detail() { return detail; }
+
+    /** Check that produced this evidence entry, or "" when not check-scoped. */
+    public String check() { return check; }
 
     @Override
     public String toString() {
