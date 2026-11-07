@@ -16,12 +16,15 @@ import ac.vigil.ai.telemetry.AiFeatureSchema;
  * library is absent (the default), {@link #available()} is false and every
  * call site degrades to "no ML score"; the deterministic engine is unaffected.
  *
- * <p><b>VERIFICATION STATUS: UNVERIFIED.</b> No ONNX model ships with VigilAC
- * and the happy path below has never been executed in this repository. The
- * adapter probes the installed library instead of assuming API shapes, so a
- * mismatch degrades to UNAVAILABLE with an explicit reason rather than a
- * class-cast surprise. Do not treat a loaded status as evidence of detection
- * quality of any kind.</p>
+ * <p><b>VERIFICATION STATUS: the I/O contract has been executed end-to-end</b>
+ * in CI against a SYNTHETIC fixture model (test-only onnxruntime dependency;
+ * see OnnxRuntimeEndToEndTest). This proves tensor shapes, the named input
+ * {@code input}, the single float output in [0,1] and checksum/schema gates —
+ * and nothing else. No ONNX model ships with VigilAC; detection quality of any
+ * model on any workload is entirely unverified and not claimed. The adapter
+ * probes the installed library instead of assuming API shapes, so a mismatch
+ * degrades to UNAVAILABLE with an explicit reason rather than a class-cast
+ * surprise. Do not treat a loaded status as evidence of detection quality.</p>
  *
  * <p>Documented I/O contract for compatible models: one tensor input shaped
  * {@code [1, featureCount]} (AiFeatureSchema order) named {@code input}; one
@@ -155,8 +158,9 @@ public final class OnnxRuntimeAnomalyModel implements AnomalyModel {
         }
         try {
             Class<?> onnxTensor = Class.forName(ONNX_TENSOR_CLASS);
+            // onnxruntime's public tensor factory is Buffer-based: createTensor(env, FloatBuffer, shape)
             Method create = findCreateTensorMethod(onnxTensor, environment);
-            Object tensor = create.invoke(null, environment, input, new long[] {1L, input.length});
+            Object tensor = create.invoke(null, environment, java.nio.FloatBuffer.wrap(input), new long[] {1L, input.length});
             Map<String, Object> feeds = Map.of("input", tensor);
             Object result = session.getClass().getMethod("run", Map.class).invoke(session, feeds);
             Object firstOutput = null;
@@ -195,9 +199,11 @@ public final class OnnxRuntimeAnomalyModel implements AnomalyModel {
     }
 
     /**
-     * Probe for the static {@code createTensor(env, float[], long[])} overload. onnxruntime
-     * has changed the first parameter's declared type between releases (Object vs
-     * OrtEnvironment), so scan the methods instead of trusting one exact signature.
+     * Probe for the static {@code createTensor(env, FloatBuffer, long[])} overload.
+     * onnxruntime publishes Buffer-based tensor factories (the float[] convenience
+     * overload is not part of the public API on 1.31.x), and the first parameter's
+     * declared type has changed between releases, so scan the methods instead of
+     * trusting one exact signature.
      */
     private static Method findCreateTensorMethod(Class<?> onnxTensor, Object environment) throws NoSuchMethodException {
         for (Method method : onnxTensor.getMethods()) {
@@ -208,12 +214,12 @@ public final class OnnxRuntimeAnomalyModel implements AnomalyModel {
             if (params.length != 3) {
                 continue;
             }
-            if (params[1] == float[].class && params[2] == long[].class
+            if (params[1] == java.nio.FloatBuffer.class && params[2] == long[].class
                     && params[0].isAssignableFrom(environment.getClass())) {
                 return method;
             }
         }
-        throw new NoSuchMethodException("ai.onnxruntime.OnnxTensor.createTensor(env, float[], long[])");
+        throw new NoSuchMethodException("ai.onnxruntime.OnnxTensor.createTensor(env, FloatBuffer, long[])");
     }
 
     /** Releases the native session/environment when present. Never throws. */
