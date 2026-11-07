@@ -69,6 +69,45 @@ public final class CombatTracker {
         return intervalCount;
     }
 
+    /**
+     * Coefficient of variation (stddev / mean) of attack intervals. Humans
+     * typing at a steady cadence still land above ~0.2; sub-0.10 values over a
+     * full window indicate software timing. NaN when empty.
+     */
+    public synchronized double intervalCv() {
+        double mean = intervalMean();
+        if (Double.isNaN(mean) || mean <= 0.0D) {
+            return Double.NaN;
+        }
+        return intervalStddev() / mean;
+    }
+
+    /**
+     * Shannon entropy (bits) of the interval distribution over
+     * {@code bucketMillis}-wide buckets. Humans spread intervals over many
+     * buckets; clickers concentrate into one or two. NaN when empty.
+     */
+    public synchronized double intervalEntropyBits(int bucketMillis) {
+        if (intervalCount == 0) {
+            return Double.NaN;
+        }
+        if (bucketMillis <= 0) {
+            bucketMillis = 1;
+        }
+        java.util.Map<Long, Integer> buckets = new java.util.HashMap<>();
+        for (int i = 0; i < intervalCount; i++) {
+            long bucket = (long) intervalRing[i] / bucketMillis;
+            buckets.merge(bucket, 1, Integer::sum);
+        }
+        double bits = 0.0D;
+        int total = intervalCount;
+        for (int n : buckets.values()) {
+            double p = (double) n / total;
+            bits -= p * (Math.log(p) / Math.log(2.0D));
+        }
+        return bits;
+    }
+
     /** Mean attack interval over the stored window (ms). NaN when empty. */
     public synchronized double intervalMean() {
         if (intervalCount == 0) {

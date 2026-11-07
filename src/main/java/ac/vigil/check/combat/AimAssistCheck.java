@@ -10,30 +10,24 @@ import ac.vigil.detection.AttackContext;
 /**
  * Detects instant aim snapping onto attacked entities.
  *
- * <h2>Algorithm</h2>
+ * <h2>Algorithm (v2, Phase 6)</h2>
  * <ol>
- *   <li>Computes the angle between the attacker's look vector and the
- *       direction to the center of the attacked bounding box (exact vector
- *       math; MC yaw 0 &rarr; +Z, increasing clockwise).</li>
- *   <li>Keeps the previous attack's rotation snapshot. A <b>snap</b> is an
- *       angular swing larger than {@code snapAngularDelta} between two
- *       attacks closer together than {@code snapMaxIntervalMillis} that
- *       lands within {@code snapAngleToTarget} of the target center.
- *       Humans re-aim smoothly over several ticks and cannot teleport their
- *       crosshair from arbitrary orientation to sub-6&deg; bearing in under
- *       120 ms.</li>
- *   <li>{@code minSnapStreak} (default 4) consecutive snaps are required
- *       before VL accrues; any attack that is not a snap resets the streak.</li>
+ *   <li><b>Bearing</b>: angle between the attacker's look vector and the
+ *       <em>nearest point of the target's bounding box</em> as seen from the
+ *       eye — not the centroid. A tall entity's legs and torso both satisfy
+ *       a small bearing, which is exactly what an assist needs.</li>
+ *   <li><b>Swing magnitude</b>: with packetevents installed, the rotation
+ *       stream is consulted: the total absolute angular distance covered in
+ *       the {@code snapMaxIntervalMillis} before the attack must exceed
+ *       {@code snapAngularDelta}. Without packetevents, the swing is derived
+ *       from the previous attack's rotation (pre-v2 behaviour).</li>
+ *   <li>{@code minSnapStreak} (default 4) consecutive snaps on a target with
+ *       angle &lt; {@code snapAngleToTarget} are required before VL accrues.</li>
  * </ol>
  *
- * <h2>False-positive considerations</h2>
- * <ul>
- *   <li>Animal/mob hits right as the player turns to them can look snap-ish;
- *       the streak gate and the 6&deg; bearing requirement keep borderline
- *       human flicks out.</li>
- *   <li>Latency does not change where the client reports the swing origin.</li>
- *   <li>Creative/spectator gamemodes and vehicles are exempt.</li>
- * </ul>
+ * <p>Smooth, continuous re-aiming never accumulates a snap streak; nothing in
+ * this check penalizes "good aim" — it penalizes instantaneous re-orientation
+ * that ends inside a target's box.</p>
  */
 public final class AimAssistCheck implements Check<AttackContext> {
 
@@ -68,7 +62,7 @@ public final class AimAssistCheck implements Check<AttackContext> {
             CombatTracker t = data.combatTracker();
             double swing = -1.0D;
             if (t.hasLastAim()) {
-                double yd = shortestAngleDegrees(t.getLastYaw(), ctx.getYaw());
+                double yd = AttackGeometry.shortestAngleDegrees(t.getLastYaw(), ctx.getYaw());
                 double pd = Math.abs(t.getLastPitch() - ctx.getPitch());
                 swing = Math.hypot(yd, pd);
             }
@@ -81,27 +75,31 @@ public final class AimAssistCheck implements Check<AttackContext> {
         }
 
         double eyeX = ctx.getEyeX(), eyeY = ctx.getEyeY(), eyeZ = ctx.getEyeZ();
-        double cx = (ctx.getBoxMinX() + ctx.getBoxMaxX()) * 0.5D;
-        double cy = (ctx.getBoxMinY() + ctx.getBoxMaxY()) * 0.5D;
-        double cz = (ctx.getBoxMinZ() + ctx.getBoxMaxZ()) * 0.5D;
-        double dx = cx - eyeX, dy = cy - eyeY, dz = cz - eyeZ;
-        double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (length < 1.0E-4D) {
-            return; // hitbox center at the eye: bearing is undefined, not suspicious
-        }
-
-        double angleToTarget = angleBetweenLookAnd(ctx.getYaw(), ctx.getPitch(), dx / length, dy / length, dz / length);
+        double angleToTarget = AttackGeometry.angleToClosestPointOnBox(
+                ctx.getYaw(), ctx.getPitch(), eyeX, eyeY, eyeZ,
+                ctx.getBoxMinX(), ctx.getBoxMinY(), ctx.getBoxMinZ(),
+                ctx.getBoxMaxX(), ctx.getBoxMaxY(), ctx.getBoxMaxZ());
 
         CombatTracker tracker = data.combatTracker();
         long now = ctx.getTimestamp();
 
         boolean snap = false;
-        if (tracker.hasLastAim()) {
-            double yawDelta = shortestAngleDegrees(tracker.getLastYaw(), ctx.getYaw());
+        double swing = -1.0D;
+        long interval = tracker.lastAttackAgeMillis(now);
+        if (data.rotationTracker().size(now) >= 2) {
+            // Telemetry path: total angular motion covered in the window ending at the attack.
+            swing = data.rotationTracker().angularDistanceCovered(now, snapMaxIntervalMillis);
+            snap = swing > snapAngularDelta
+                    && interval <= snapMaxIntervalMillis
+                    && angleToTarget < snapAngleToTarget;
+        } else if (tracker.hasLastAim()) {
+            // Fallback path (packetevents absent): swing between consecutive attacks.
+            double yawDelta = AttackGeometry.shortestAngleDegrees(tracker.getLastYaw(), ctx.getYaw());
             double pitchDelta = Math.abs(tracker.getLastPitch() - ctx.getPitch());
-            double swing = Math.hypot(yawDelta, pitchDelta);
-            long interval = tracker.lastAttackAgeMillis(now);
-            snap = swing > snapAngularDelta && interval <= snapMaxIntervalMillis && angleToTarget < snapAngleToTarget;
+            swing = Math.hypot(yawDelta, pitchDelta);
+            snap = swing > snapAngularDelta
+                    && interval <= snapMaxIntervalMillis
+                    && angleToTarget < snapAngleToTarget;
         }
 
         tracker.recordAim(ctx.getYaw(), ctx.getPitch());
@@ -118,31 +116,8 @@ public final class AimAssistCheck implements Check<AttackContext> {
 
         double amount = vlPerSnap * Math.min(2.0D, 1.0D + (streak - minSnapStreak) * 0.25D);
         String debug = String.format(java.util.Locale.US,
-                "angleToTarget=%.2fdeg streak=%d interval=%dms ping=%d",
-                angleToTarget, streak, tracker.lastAttackAgeMillis(now), ctx.getPingMillis());
+                "angleToBox=%.2fdeg swing=%.1fdeg streak=%d interval=%dms ping=%d",
+                angleToTarget, swing, streak, interval, ctx.getPingMillis());
         callback.onViolation(this, amount, debug);
-    }
-
-    /** Angle between the MC look vector for (yaw, pitch) and a normalized direction, in degrees. */
-    static double angleBetweenLookAnd(float yaw, float pitch, double dirX, double dirY, double dirZ) {
-        double yawRad = Math.toRadians(yaw);
-        double pitchRad = Math.toRadians(pitch);
-        double lookX = -Math.sin(yawRad) * Math.cos(pitchRad);
-        double lookY = -Math.sin(pitchRad);
-        double lookZ = Math.cos(yawRad) * Math.cos(pitchRad);
-        double dot = lookX * dirX + lookY * dirY + lookZ * dirZ;
-        dot = Math.max(-1.0D, Math.min(1.0D, dot));
-        return Math.toDegrees(Math.acos(dot));
-    }
-
-    /** Smallest absolute angular distance between two yaw values, in degrees (0-180). */
-    static double shortestAngleDegrees(float from, float to) {
-        double diff = (to - from) % 360.0D;
-        if (diff > 180.0D) {
-            diff -= 360.0D;
-        } else if (diff < -180.0D) {
-            diff += 360.0D;
-        }
-        return Math.abs(diff);
     }
 }

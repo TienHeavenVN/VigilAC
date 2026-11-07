@@ -86,11 +86,18 @@ public final class AutoClickerCheck implements Check<AttackContext> {
         long now = ctx.getTimestamp();
         int samples = tracker.getIntervalSampleCount();
         double cps = tracker.cps(now, 1_000L);
+        // Packet telemetry (optional): attack attempts include misses the damage
+        // stream never sees. The rate gate uses the stronger of the two signals.
+        double attemptRate = data.attackAttemptLedger().attemptRate(now, 1_000L);
+        int attemptSamples = data.attackAttemptLedger().attemptsSince(now, 1_000L);
+        double rate = Math.max(cps, attemptRate);
+        int rateSamples = Math.max(samples, attemptSamples);
 
-        if (samples >= minSamples && cps > cpsCap) {
-            double amount = vlPerTrigger * Math.min(2.0D, cps / cpsCap);
+        if (rateSamples >= minSamples && rate > cpsCap) {
+            double amount = vlPerTrigger * Math.min(2.0D, rate / cpsCap);
             String debug = String.format(java.util.Locale.US,
-                    "cps=%.1f cap=%.1f samples=%d ping=%d", cps, cpsCap, samples, ctx.getPingMillis());
+                    "rate=%.1f/s cps=%.1f attemptRate=%.1f cap=%.1f samples=%d/%d ping=%d",
+                    rate, cps, attemptRate, cpsCap, samples, attemptSamples, ctx.getPingMillis());
             callback.onViolation(this, amount, debug);
             tracker.resetRoboticStreak();
             return;
@@ -115,9 +122,11 @@ public final class AutoClickerCheck implements Check<AttackContext> {
 
         double mean = tracker.intervalMean();
         double stddev = tracker.intervalStddev();
+        double cv = tracker.intervalCv();
+        double entropy = tracker.intervalEntropyBits(25);
         String debug = String.format(java.util.Locale.US,
-                "meanInterval=%.1fms stddev=%.1fms streak=%d cps=%.1f ping=%d",
-                mean, stddev, streak, cps, ctx.getPingMillis());
+                "meanInterval=%.1fms stddev=%.1fms cv=%.3f entropyBits=%.2f streak=%d cps=%.1f attemptRate=%.1f ping=%d",
+                mean, stddev, cv, entropy, streak, cps, attemptRate, ctx.getPingMillis());
         callback.onViolation(this, vlPerTrigger, debug);
     }
 }
