@@ -2,16 +2,16 @@
 
 Standing mandate: implement in stages, smallest honest slice first; never fabricate datasets, metrics or results; deterministic engine untouched; ML alone never punishes.
 
-Status as of 2026-11-07 (HEAD pending CI — see `AI_VERIFICATION.md`):
+Status as of 2026-11-07 (CI run [42390581454](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390581454) green @ `3ad0bae`; see `AI_VERIFICATION.md`):
 
 | Stage | Scope | Status | Evidence |
 |---|---|---|---|
-| 1 | AI architecture + telemetry interfaces (features, schema, extractor, validator) | **IMPLEMENTED + TESTED** | `telemetry/` package; `FeatureExtractorTest`, `FeatureValidatorTest`, `AiFeatureSchemaTest`; CI pending |
-| 2 | Shadow-mode anomaly detection (bounded pool, IF trainer/loader, shadow evidence) | **IMPLEMENTED + TESTED (shadow only)** | `runtime/`, `ml/isolationforest/`, `AiShadowWorkerPoolTest`, `IsolationForest*Test`; default OFF: no inference until `ai.enabled=true` |
+| 1 | AI architecture + telemetry interfaces (features, schema, extractor, validator) | **IMPLEMENTED + TESTED + CI_VERIFIED** | `telemetry/` package; `FeatureExtractorTest`, `FeatureValidatorTest`, `AiFeatureSchemaTest` |
+| 2 | Shadow-mode anomaly detection (bounded pool, IF trainer/loader, shadow evidence) | **IMPLEMENTED + TESTED + CI_VERIFIED (shadow only)** | `runtime/`, `ml/isolationforest/`, `AiShadowWorkerPoolTest`, `IsolationForest*Test`; default OFF: no inference until `ai.enabled=true` |
 | 3 | Training/evaluation pipeline | **PARTIAL** | Trainer + deterministic seeded isolation forest + split-by-player/session protocol documented in `AI_VERIFICATION.md`. **No dataset exists; therefore NO trained model, NO accuracy/precision/recall claims, NO production metrics.** Non-goals remain explicit. |
 | 4 | ONNX runtime integration | **IMPLEMENTED (adapter) + UNVERIFIED (end-to-end)** | Reflection-guarded adapter; absent runtime ⇒ `UNAVAILABLE`, never throws; no `.onnx` model exists in repo; happy path never executed |
-| 5 | Evidence correlation | **IMPLEMENTED + TESTED** | `AiEvidenceCorrelator` (NONE/LOW/MEDIUM/HIGH; ML-only ⇒ ≤ LOW; FP downgrade); `AiEvidenceCorrelatorTest`; `ai-shadow` self-corroboration excluded |
-| 6 | Admin assistant | **IMPLEMENTED + TESTED (offline templates; LLM optional/disabled)** | `assistant/`; ships NoopLlmProvider only; `AdminAssistantTest`; reports carry limitations + disclaimer |
+| 5 | Evidence correlation | **IMPLEMENTED + TESTED + CI_VERIFIED** | `AiEvidenceCorrelator` (NONE/LOW/MEDIUM/HIGH; ML-only ⇒ ≤ LOW; FP downgrade); `AiEvidenceCorrelatorTest`; `ai-shadow` self-corroboration excluded |
+| 6 | Admin assistant | **IMPLEMENTED + TESTED + CI_VERIFIED (offline templates; LLM optional/disabled)** | `assistant/`; ships NoopLlmProvider only; `AdminAssistantTest`; reports carry limitations + disclaimer |
 | 7 | Performance + real-client validation | **BLOCKED** | Requires real production server + consenting client builds; `REAL_CLIENT_VALIDATION` stays BLOCKED |
 
 ## Order of work actually followed

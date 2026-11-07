@@ -8,7 +8,7 @@ Honesty contract: this document contains only what was actually measured. Where 
 
 | Item | Status | Notes |
 |---|---|---|
-| Feature schema + extraction from existing trackers | IMPLEMENTED, TESTED, CI_VERIFIED* | *CI status of the push containing this doc — see "CI runs" below |
+| Feature schema + extraction from existing trackers | IMPLEMENTED, TESTED, CI_VERIFIED | CI run 42390581454 (`3ad0bae`), 366 tests green |
 | Feature validation (count/finite/range/empty-signal) | IMPLEMENTED, TESTED | `FeatureValidatorTest` |
 | Isolation Forest trainer (seeded, deterministic) | IMPLEMENTED, TESTED | `IsolationForestTrainerTest` |
 | Model artifact round-trip (train→write→read→score equality) | IMPLEMENTED, TESTED | `IsolationForestModelTest` |
@@ -42,9 +42,19 @@ Honesty contract: this document contains only what was actually measured. Where 
 
 ## CI runs
 
-Recorded after the push completes (docs-sync commit):
-
-- (pending — filled by the docs-sync commit; see `git log` and the Actions tab)
+- `3ad0bae` — CI run [42390581454](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390581454): **success**.
+  All 19 jobs green (build, `Build and test` on the primary toolchain, 16 compatibility matrix
+  cells incl. 1.21-1.21.11 and 26.x, authoritative version inventory). Primary job annotation:
+  `tests=366 skipped=0 failures=0 errors=0` (Phase 7 base was 280; +86 AI tests).
+- `e2eb7ed` — CI run [42390460389](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390460389): **failure**.
+  Root cause: `FeatureExtractorTest.breakIntervalWithoutHistoryIsZeroNotNegative` —
+  expected 0.0, was 60000.0. `BlockActionTracker.breakInterval(now)` returns `Long.MAX_VALUE`
+  for "no break on record"; the extractor clipped it to the schema max (a fabricated
+  measurement). Fixed in `3ad0bae`; no thresholds, no test expectations weakened — the test
+  expectation (0 = unknown floor) was correct and is now satisfied by the code.
+- Load test / runtime smoke / live bot harness jobs were `skipped` in these runs (they are
+  gated); no runtime smoke of the AI command has been performed by CI either.
+- This docs-sync commit does not change source; its own CI result is the commit's check status.
 
 ## Commands used
 
