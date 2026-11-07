@@ -41,7 +41,7 @@ jobs:
       - name: Compile main sources
         run: |
           set +e
-          ./gradlew compileJava --no-daemon > compile.log 2>&1
+          ./gradlew compileJava --no-daemon -Dorg.gradle.java.home=${{ steps.jdk21.outputs.path }} -Porg.gradle.java.installations.paths=${{ steps.jdk25.outputs.path }},${{ steps.jdk21.outputs.path }} > compile.log 2>&1
           code=$?
           tr '\r' '\n' < compile.log | tail -n 40
           if [ $code -ne 0 ]; then
@@ -124,7 +124,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (Temurin)
+      # Gradle 8.14.3 cannot run on Java 25 (Java 25 requires Gradle 9.1+),
+      # so the daemon runs on JDK 21; the compile toolchain comes from JDK 25.
+      - name: Set up JDK 21 (Temurin, Gradle daemon JVM)
+        id: jdk21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up JDK 25 (Temurin, compile toolchain)
+        id: jdk25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -145,7 +154,7 @@ jobs:
       - name: Compile against paper-api 26.1.2.build.74-stable (release 25; lowest supported 26.x API)
         run: |
           set +e
-          ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.1.2.build.74-stable -PjavaRelease=25 -PartifactName=VigilAC-26x > compile.log 2>&1
+          ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.1.2.build.74-stable -PjavaRelease=25 -PartifactName=VigilAC-26x -Dorg.gradle.java.home=${{ steps.jdk21.outputs.path }} -Porg.gradle.java.installations.paths=${{ steps.jdk25.outputs.path }},${{ steps.jdk21.outputs.path }} > compile.log 2>&1
           code=$?
           tr '\r' '\n' < compile.log | tail -n 40
           if [ $code -ne 0 ]; then
@@ -214,11 +223,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK ${{ matrix.jdk }} (Temurin)
+      # Gradle 8.14.3 cannot run on Java 25 (Java 25 requires Gradle 9.1+),
+      # so the Gradle daemon always runs on JDK 21. The 26.x compile toolchain
+      # comes from JDK 25 (explicit installation path below).
+      - name: Set up JDK 21 (Temurin, Gradle daemon JVM)
+        id: jdk21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '${{ matrix.jdk }}'
+          java-version: '21'
+      - name: Set up JDK 25 (Temurin, 26.x toolchain / server JVM)
+        id: jdk25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      # Servers of the 1.21.8 smoke leg must run on 21; 26.x smoke servers on 25.
+      - name: Pin server JVM to this leg's matrix JDK
+        if: matrix.jdk == '21'
+        run: echo "JAVA_HOME=${{ steps.jdk21.outputs.path }}" >> "$GITHUB_ENV"
+
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -240,7 +264,7 @@ jobs:
       - name: Compile against paper-api ${{ matrix.paper }}
         run: |
           set +e
-          ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} > compile.log 2>&1
+          ./gradlew compileJava --no-daemon -PpaperApiVersion=${ matrix.api } -PjavaRelease=${ matrix.javaRelease } -Dorg.gradle.java.home=${{ steps.jdk21.outputs.path }} -Porg.gradle.java.installations.paths=${{ steps.jdk25.outputs.path }},${{ steps.jdk21.outputs.path }} > compile.log 2>&1
           code=$?
           tr '\r' '\n' < compile.log | tail -n 40
           if [ $code -ne 0 ]; then
@@ -253,7 +277,7 @@ jobs:
       - name: Unit tests against paper-api ${{ matrix.paper }}
         run: |
           set +e
-          ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} > test.log 2>&1
+          ./gradlew test --no-daemon -PpaperApiVersion=${ matrix.api } -PjavaRelease=${ matrix.javaRelease } -Dorg.gradle.java.home=${{ steps.jdk21.outputs.path }} -Porg.gradle.java.installations.paths=${{ steps.jdk25.outputs.path }},${{ steps.jdk21.outputs.path }} > test.log 2>&1
           code=$?
           tail -n 25 test.log
           if [ $code -ne 0 ]; then
@@ -450,17 +474,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK ${{ matrix.jdk }} (Temurin)
+      # Gradle 8.14.3 cannot run on Java 25 (Java 25 requires Gradle 9.1+),
+      # so the Gradle daemon always runs on JDK 21. The 26.x compile toolchain
+      # comes from JDK 25 (explicit installation path below).
+      - name: Set up JDK 21 (Temurin, Gradle daemon JVM)
+        id: jdk21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '${{ matrix.jdk }}'
+          java-version: '21'
+      - name: Set up JDK 25 (Temurin, 26.x toolchain / server JVM)
+        id: jdk25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      # Servers of the 1.21.8 smoke leg must run on 21; 26.x smoke servers on 25.
+      - name: Pin server JVM to this leg's matrix JDK
+        if: matrix.jdk == '21'
+        run: echo "JAVA_HOME=${{ steps.jdk21.outputs.path }}" >> "$GITHUB_ENV"
+
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build plugin (${{ matrix.artifactName }})
-        run: ./gradlew shadowJar --no-daemon -q -PpaperApiVersion=${{ matrix.buildApi }} -PjavaRelease=${{ matrix.javaRelease }} -PartifactName=${{ matrix.artifactName }}
+        run: ./gradlew shadowJar --no-daemon -q -PpaperApiVersion=${ matrix.buildApi } -PjavaRelease=${ matrix.javaRelease } -PartifactName=${ matrix.artifactName } -Dorg.gradle.java.home=${{ steps.jdk21.outputs.path }} -Porg.gradle.java.installations.paths=${{ steps.jdk25.outputs.path }},${{ steps.jdk21.outputs.path }}
 
       - name: Download Paper ${{ matrix.paper }} (Fill v3 API, SHA-256 verified)
         env:
