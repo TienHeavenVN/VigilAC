@@ -29,6 +29,9 @@ It never:
 5. A model that fails any load check (schema hash mismatch, artifact SHA-256 mismatch, format-version mismatch, normalization mismatch, feature-count mismatch) is marked `unavailable` for that model only; all other models and the deterministic engine continue unaffected.
 6. AI never claims a player is cheating. Reports always end with limitations + the advisory disclaimer.
 7. No trained model ships with VigilAC. `REAL_CLIENT_VALIDATION` remains **BLOCKED**.
+8. Datasets: no corpus ships with the repository. `tools/dataset/` defines the capture contract,
+   validation/dedup/split/evaluate tooling and the minimum-data gates; `docs/DATASET.md` is the contract
+   and `docs/AI_DATASET_EVALUATION.md` is the honest ledger (currently: nothing measured on real data).
 
 ## 3. Module layout (`ac.vigil.ai`)
 
@@ -42,8 +45,9 @@ ml/          ModelAlgorithm · AnomalyModel (manifest()/anomalyScore()/status())
 ml/isolationforest/   TrainedForest (VIGILIF1 format, Liu c(n)) · IsolationForestTrainer
              (seeded Random, subsample ≤ 256, maxDepth=ceil(log2 n), MinSamples=8) ·
              IsolationForestModel (AnomalyModel; enforces schema+checksum+normalization consistency)
-ml/onnx/     OnnxRuntimeAnomalyModel (reflection-guarded optional adapter;
-             UNVERIFIED happy path; documented I/O contract: float[1,22] in, float in [0,1] out)
+ml/onnx/     OnnxRuntimeAnomalyModel (reflection-guarded optional adapter; happy path TESTED
+             end-to-end in CI with a real onnxruntime against a SYNTHETIC fixture model;
+             documented I/O contract: float[1,22] in, single output float in [0,1] out)
 runtime/     AiShadowWorkerPool (bounded ArrayBlockingQueue, drop-newest + counter,
              per-task timeout watchdog, latency EMA, dedicated daemon workers, stop()) ·
              AiInferenceSink · AiStatus
@@ -101,7 +105,7 @@ NaN/∞ map to the documented range floor (never a guess). Snapshots failing `Fe
 
 `TrainedForest` format (`VIGILIF1`): population mean/stddev (for ZSCORE), per-tree node arrays, depth limit `ceil(log2(subsample))`, Liu's `c(n) = 2(ln(n−1)+γ) − 2(n−1)/n` with `c(≤1)=1.0`; anomaly score `2^(−E(h)/c(n))` in [0,1]. Loader validates counts/bounds/ordering; round-trip (train → write → read → score) is bit-exact and covered by tests.
 
-ONNX: optional `onnxruntime` must be present on the server classpath (reflection-guarded); model contract = one float tensor `[1,22]` named `input`, first output float in [0,1]. **Happy path UNVERIFIED — no model exists in this repo.**
+ONNX: optional `onnxruntime` must be present on the server classpath (reflection-guarded; never bundled). Model contract = one float tensor `[1,22]` named `input`; one tensor output whose first float is in [0,1] (the supervised exporter emits exactly one output, `anomaly_score`). The contract is executed end-to-end in CI via `OnnxRuntimeEndToEndTest` against a committed SYNTHETIC fixture model — contract validation only, not detection quality. No production model exists; no model ships with the plugin.
 
 ## 7. Evidence correlator (Stage 5)
 
@@ -126,6 +130,7 @@ Offline templates always available when `ai.admin-assistant.enabled=true` (defau
 | Models dir missing/empty | Pool idles; correlator operates on deterministic evidence only |
 | Model unreadable/corrupt/schema drift/checksum fail | That model unavailable; logged; others continue |
 | ONNX Runtime absent | ONNX models unavailable with explicit reason |
+| Rollback to previous model | `ai.active-model-id` = last-known-good modelId; others skipped, artifacts never read |
 | Inference throws/timeout | Job counted `failed`/`timedOut`; worker survives |
 | Queue full | Drop + counter; producer (scheduler) never blocks |
 | Player data unavailable at sink time | Shadow evidence skipped silently; score still recorded in history? (No — skipped entirely) |

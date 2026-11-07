@@ -1,6 +1,6 @@
 # VigilAC AI-Assist — Verification Report
 
-**Date:** 2026-11-07 · **Branch:** `arena/a7154a72-vigilac` · **Base:** `main` @ `70b8853` (Phase 7 tip `631888a`)
+**Date:** 2026-11-08 · **Branch:** `arena/a7154a72-vigilac` · **Base:** `main` @ `70b8853` (Phase 7 tip `631888a`)
 
 Honesty contract: this document contains only what was actually measured. Where something was not measured, it says NOT MEASURED. `REAL_CLIENT_VERIFIED` is never claimed.
 
@@ -19,28 +19,37 @@ Honesty contract: this document contains only what was actually measured. Where 
 | AI report rendering (limitations footer mandatory) | IMPLEMENTED, TESTED | `AiReportBuilderTest` |
 | `/vigilac ai` command + `vigilac.ai` permission | IMPLEMENTED, NOT RUNTIME-TESTED | Requires a live server; no server was available in this environment |
 | ONNX adapter load with runtime absent | IMPLEMENTED, TESTED (absence path) | `OnnxRuntimeAnomalyModelTest` |
-| ONNX end-to-end inference with a real model | **UNVERIFIED** | No `.onnx` artifact exists; never executed |
-| Trained model quality (any metric) | **NOT MEASURED — no dataset** | Stage 3 PARTIAL; zero accuracy claims made |
+| ONNX end-to-end inference (real onnxruntime, synthetic fixture model) | IMPLEMENTED, TESTED | `OnnxRuntimeEndToEndTest` — Java score == Python onnxruntime reference within 1e-4; fixture says nothing about real cheats |
+| XGBoost → ONNX export + onnxruntime parity (synthetic) | EXECUTED, NOT COMMITTED | max \|Δ\| = 2.98e-08 on a 5-tree/depth-2 toy model; empty test split honestly reported |
+| Dataset tooling (ingest/validate/split/evaluate; gates) | IMPLEMENTED, TESTED | `tools/dataset/` + 24 stdlib tests, wired into CI |
+| Model rollback (`ai.active-model-id`) | IMPLEMENTED, TESTED | `ModelRegistryTest`, `AiServicesLifecycleTest`; artifact of skipped models never read |
+| Schema hash cross-language lock | TESTED | `SchemaHashGoldenTest` (Java) + `test_pipeline.py` (Python); golden `2f2b0a3eb456…` |
+| Inference performance benchmark (tripwire only) | TESTED (bound), NOT A PRODUCTION BENCHMARK | `AiInferenceBenchmarkTest` — 10k scorings, < 10 s bound, stats printed |
+| Trained model quality (any metric) | **NOT MEASURED — no dataset** | Zero accuracy claims made; `AI_DATASET_EVALUATION.md` |
 | Production/real-client validation | **BLOCKED** | Requires live servers + consenting clients |
-| Performance on production hardware | **NOT MEASURED** | Micro-bounds are by construction (bounded queue/pool), not benchmarked |
+| Performance on production hardware | **NOT MEASURED** | The Java benchmark covers unit-test bounds only |
 
 ## What was verified how
 
 - **Unit tests** (pure Java JUnit5; Paper classes never loaded): schema stability/hash, extractor clip behaviour incl. NaN/Inf, validator rejections incl. all-zero snapshot, trainer determinism (same seed ⇒ identical forest bytes) and subsample behaviour at the 8-sample floor, artifact load failures (checksum, schema, normalization mismatch), ONNX absence ⇒ `available()==false` + reason, pool saturation/drop/timeout/stop, correlator tier matrix incl. boundary pings and fresh exemptions, assistant disclaimer/redaction, report limitations footer, `AiConfig` defaults all OFF.
-- **Split protocol for any future evaluation:** group split by player, then by session within player (no adjacent windows across train/test); metrics reported only from that protocol. None performed — no dataset.
+- **Split protocol:** group split by player (deterministic sha256-based, seed recorded) — implemented in `tools/dataset/split.py` and enforced at evaluation time by `assert_no_leakage`; `split --check` re-verifies. Never performed on real data — no dataset.
+- **ONNX export contract:** the supervised exporter wraps the classifier to a single output `anomaly_score` (class-1 probability), matching the documented Java adapter contract exactly; verified with onnxruntime CPU.
 - **CI:** the push that introduced this document triggers the standard CI workflow (`.github/workflows/ci.yml`: compile + `./gradlew test`, Ubuntu runner, Java toolchain per repo config). Exact SHA + run URL are recorded under "CI runs" after completion; until then no claim of CI-greenness is made.
 
 ## Known limitations (explicit, load-bearing)
 
 1. No trained model exists ⇒ ML shadow score is never present out-of-the-box ⇒ correlator runs deterministic-only until a model drop-in is performed.
-2. ONNX I/O path (`input`/`float[1,22]`/first output ∈ [0,1]) is documented but never executed; a mismatching model degrades to `UNAVAILABLE` or inference failure, not to a verdict.
-3. `Task-watchdog` timeout cannot preempt native code mid-call; it bounds accounting, and pure-Java forest inference is microsecond-scale.
+2. ONNX happy path has been executed only against a committed SYNTHETIC fixture model (5 trees). A mismatching model degrades to `UNAVAILABLE` or inference failure, not to a verdict; nothing about real-world model behaviour is evidenced.
+3. `Task-watchdog` timeout cannot preempt native code mid-call; it bounds accounting, and pure-Java forest inference is microsecond-scale **as bounded by construction, not by a production measurement**.
 4. The command/report path was compile-checked via CI only; no in-game execution was performed.
 5. Redaction covers target name/UUID/IPv4; usernames of *other* players in free text are not enumerated — LLM egress stays off by default for this reason among others.
 6. AI evidence (`ai-shadow`) is deliberately excluded from deterministic corroboration (no self-corroboration loops).
 7. REAL_CLIENT_VALIDATION is **BLOCKED**: nothing in this repository evidences behaviour against real clients, cheat or otherwise.
 
 ## CI runs
+
+- `ca9607a` — rollback/registry/ONNX-contract commit; CI run recorded below once green (this document is updated in a follow-up docs commit with the exact run IDs; no greenness is claimed before that).
+- `a75294f` — dataset tooling commit; CI run recorded below once green.
 
 - `3ad0bae` — CI run [42390581454](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390581454): **success**.
   All 19 jobs green (build, `Build and test` on the primary toolchain, 16 compatibility matrix
