@@ -83,9 +83,10 @@ public final class PlayerMoveListener implements Listener {
             return;
         }
 
-        // Relative teleports inside one event: mark grace and skip.
+        // Relative teleports inside one event: mark grace, record for the monitor, skip.
         if (from.distanceSquared(to) > cfg.teleportThreshold() * cfg.teleportThreshold()) {
             data.setTeleportGraceUntil(System.currentTimeMillis() + cfg.teleportGraceMillis());
+            data.monitor().noteTeleport("relative-delta");
             return;
         }
 
@@ -133,6 +134,25 @@ public final class PlayerMoveListener implements Listener {
                 .serverTps(tps)
                 .timestamp(System.currentTimeMillis())
                 .build();
+
+        data.monitor().noteMove(ac.vigil.monitor.MoveSample.builder()
+                .at(to.getX(), to.getY(), to.getZ())
+                .rotation(to.getYaw(), to.getPitch())
+                .onGround(player.isOnGround())
+                .sprinting(player.isSprinting())
+                .sneaking(player.isSneaking())
+                .gliding(player.isGliding())
+                .swimming(player.isSwimming())
+                .inVehicle(player.isInsideVehicle())
+                .levitation(levitation)
+                .slowFalling(slowFalling)
+                .speedPotionLevel(speedLevel)
+                .pingMillis((int) player.getPing())
+                .serverTps(tps)
+                .worldName(to.getWorld().getName())
+                .gameMode(player.getGameMode().name())
+                .timestamp(System.currentTimeMillis())
+                .build());
 
         checkManager.evaluateMovement(context, data, pipeline.forPlayer(player, data));
     }

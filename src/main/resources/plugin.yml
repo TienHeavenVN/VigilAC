@@ -11,7 +11,7 @@ softdepend:
 commands:
   vigilac:
     description: VigilAC administration command
-    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|help>
+    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|monitor|help>
     permission: vigilac.command
 permissions:
   vigilac.command:
@@ -37,4 +37,7 @@ permissions:
     default: op
   vigilac.exempt:
     description: Toggle exemptions for players; players with this permission bypass all checks
+    default: op
+  vigilac.monitor:
+    description: View continuous monitoring state and per-check detection status for a player
     default: op

@@ -15,6 +15,7 @@ public final class PlayerData {
     private final UUID uuid;
     private final java.util.function.LongSupplier clock;
     private final long joinTimeMillis;
+    private final ac.vigil.monitor.PlayerMonitor monitor;
     private final ac.vigil.data.tracking.MovementTracker movement = new ac.vigil.data.tracking.MovementTracker();
     private final ac.vigil.data.tracking.CombatTracker combat = new ac.vigil.data.tracking.CombatTracker();
     private final ac.vigil.data.tracking.BlockActionTracker blockActions = new ac.vigil.data.tracking.BlockActionTracker();
@@ -54,6 +55,7 @@ public final class PlayerData {
         this.clock = clock;
         this.joinTimeMillis = clock.getAsLong();
         this.packetWindowStart = this.joinTimeMillis;
+        this.monitor = new ac.vigil.monitor.PlayerMonitor(clock);
     }
 
     public UUID getUuid() {
@@ -245,6 +247,11 @@ public final class PlayerData {
 
     public ac.vigil.data.tracking.BlockActionTracker blockActionTracker() {
         return blockActions;
+    }
+
+    /** Access to the per-player continuous monitoring state (bounded; see PlayerMonitor). */
+    public ac.vigil.monitor.PlayerMonitor monitor() {
+        return monitor;
     }
 
     /** Records the last time this player took damage (any EntityDamageEvent, main thread). */

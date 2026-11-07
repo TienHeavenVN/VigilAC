@@ -18,10 +18,11 @@ import ac.vigil.detection.DetectionContext;
  *       leaving the ground state, so net falls include jumps and rises.</li>
  *   <li>On the landing tick (airborne → grounded transition), if the
  *       accumulated descent exceeds {@code minFallDistance} (default 3.5,
- *       matching the vanilla 3-block damage threshold) and no
+ *       matching the vanilla 3-block damage threshold) and no FALL-cause
  *       {@code EntityDamageEvent} for this player was recorded within
  *       {@code damageGraceMillis} (default 500 ms), the landing counts as
- *       <b>suspicious</b>.</li>
+ *       <b>suspicious</b>. Unrelated (non-fall) damage never resets the
+ *       streak; it is recorded for the monitor only.</li>
  *   <li>Falling far without damage has a legitimate explanation pool
  *       (slime/honey, Slow Falling, Levitation, water, &hellip;), all of
  *       which are exempted — so each suspicious landing increments a streak.
@@ -47,12 +48,26 @@ public final class NoFallCheck implements Check<DetectionContext> {
     private final long damageGraceMillis;
     private final int minSuspiciousLandings;
     private final double vlPerLanding;
+    private final ac.vigil.monitor.CorrelationEngine correlation = new ac.vigil.monitor.CorrelationEngine();
 
     public NoFallCheck(double minFallDistance, long damageGraceMillis, int minSuspiciousLandings, double vlPerLanding) {
         this.minFallDistance = minFallDistance;
         this.damageGraceMillis = damageGraceMillis;
         this.minSuspiciousLandings = minSuspiciousLandings;
         this.vlPerLanding = vlPerLanding;
+    }
+
+    private static String exemptReason(DetectionContext ctx) {
+        if (ctx.isInVehicle()) return "in vehicle";
+        if (ctx.isGliding()) return "gliding (elytra)";
+        if (ctx.isInLiquid()) return "in liquid";
+        if (ctx.isTeleportGrace()) return "teleport grace";
+        if (ctx.isKnockbackGrace()) return "velocity/knockback grace";
+        if (ctx.isLevitation()) return "levitation";
+        if (ctx.isSlowFalling()) return "slow falling";
+        if (ctx.isOnSlipperyBlock()) return "slippery block at feet";
+        if (ctx.getServerTps() < MIN_TPS) return "server TPS below 10";
+        return "environmental";
     }
 
     @Override
@@ -80,6 +95,7 @@ public final class NoFallCheck implements Check<DetectionContext> {
             // from being judged against a distance the player never fell
             // through under their own momentum.
             tracker.leaveAirborne();
+            data.monitor().noteExemption(getName(), exemptReason(ctx));
             return;
         }
 
@@ -98,22 +114,34 @@ public final class NoFallCheck implements Check<DetectionContext> {
             }
             return;
         }
+        data.monitor().noteLanding(descent);
 
-        long sinceDamage = now - data.getLastDamageAt();
-        if (data.getLastDamageAt() > 0L && sinceDamage >= 0L && sinceDamage <= damageGraceMillis) {
+        // Exculpation is ONLY fall-cause damage inside the grace window.
+        // Unrelated damage (zombies, lava, drowning) is recorded for the
+        // monitor but never resets the streak or excuses the landing.
+        long sinceFallDamage = now - data.monitor().lastFallDamageAt();
+        if (data.monitor().lastFallDamageAt() > 0L && sinceFallDamage >= 0L && sinceFallDamage <= damageGraceMillis) {
             tracker.resetSuspiciousLandings(); // fall damage applied: legit
             return;
         }
 
+        // Corroborate: informational confidence + supporting facts. The
+        // correlation's suppressing list never gates VL — only server facts
+        // with their own grace windows may excuse a landing.
+        ac.vigil.monitor.CorrelationResult corr = correlation.correlateNoFall(data.monitor(), descent, minFallDistance);
+
         int streak = tracker.addSuspiciousLanding();
+        data.monitor().noteNoFallSuspiciousLanding(String.format(
+                java.util.Locale.US, "descent=%.2f streak=%d corr=%.2f", descent, streak, corr.confidence()));
         if (streak < minSuspiciousLandings) {
             return;
         }
 
         double amount = vlPerLanding * Math.min(2.0D, descent / minFallDistance);
         String debug = String.format(java.util.Locale.US,
-                "fallDistance=%.2f sinceDamage=%dms streak=%d ping=%d tps=%.2f",
-                descent, data.getLastDamageAt() > 0L ? sinceDamage : -1L, streak,
+                "fallDistance=%.2f sinceFallDamage=%dms streak=%d corr=%.2f supporting=%s ping=%d tps=%.2f",
+                descent, data.monitor().lastFallDamageAt() > 0L ? sinceFallDamage : -1L, streak,
+                corr.confidence(), corr.supporting(),
                 ctx.getPingMillis(), ctx.getServerTps());
         callback.onViolation(this, amount, debug);
     }

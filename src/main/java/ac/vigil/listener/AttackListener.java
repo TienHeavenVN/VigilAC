@@ -92,6 +92,7 @@ public final class AttackListener implements Listener {
         // Combat statistics are recorded exactly once per attack here, not per
         // check, so CPS/interval windows are never double counted.
         data.combatTracker().recordAttack(context.getTimestamp());
+        data.monitor().noteAttack(target.getType().name());
         checkManager.evaluateAttack(context, data, pipeline.forPlayer(attacker, data));
     }
 }

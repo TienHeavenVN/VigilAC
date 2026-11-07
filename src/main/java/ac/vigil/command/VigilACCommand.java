@@ -13,6 +13,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ac.vigil.VigilAC;
 import ac.vigil.check.Check;
+import ac.vigil.monitor.DetectionState;
 import ac.vigil.data.PlayerData;
 import ac.vigil.util.Text;
 
@@ -23,7 +24,7 @@ import ac.vigil.util.Text;
 public final class VigilACCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS =
-            List.of("info", "alerts", "check", "violations", "debug", "reload", "exempt", "help");
+            List.of("info", "alerts", "check", "violations", "debug", "reload", "exempt", "monitor", "help");
 
     private final VigilAC plugin;
 
@@ -50,6 +51,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             case "debug" -> debug(sender, args);
             case "reload" -> reload(sender);
             case "exempt" -> exempt(sender, args);
+            case "monitor" -> monitor(sender, args);
             default -> sender.sendMessage(Text.colorize("&cUnknown subcommand. Use &e/vigilac help&c."));
         }
         return true;
@@ -64,6 +66,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("vigilac.debug")) sender.sendMessage(Text.colorize("&e/vigilac debug [player] [on|off] &7— per-player detection debug output"));
         if (sender.hasPermission("vigilac.reload")) sender.sendMessage(Text.colorize("&e/vigilac reload &7— reload config.yml"));
         if (sender.hasPermission("vigilac.exempt")) sender.sendMessage(Text.colorize("&e/vigilac exempt <player> [check|*] &7— toggle check exemptions"));
+        if (sender.hasPermission("vigilac.monitor")) sender.sendMessage(Text.colorize("&e/vigilac monitor <player> &7— continuous monitoring state + per-check detection status"));
     }
 
     private void info(CommandSender sender) {
@@ -248,6 +251,120 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
                 checkName.equals("*") ? "ALL" : checkName)));
     }
 
+
+    private void monitor(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("vigilac.monitor")) {
+            noPerm(sender);
+            return;
+        }
+        Player target = resolveTarget(sender, args, 1);
+        if (target == null) {
+            return;
+        }
+        PlayerData data = plugin.getPlayerDataManager().get(target.getUniqueId());
+        if (data == null) {
+            sender.sendMessage(Text.colorize("&e" + target.getName() + " is not being tracked yet."));
+            return;
+        }
+        ac.vigil.monitor.PlayerMonitor monitor = data.monitor();
+        long now = monitor.nowMillis();
+        int online = Bukkit.getOnlinePlayers().size();
+
+        sender.sendMessage(Text.colorize("&6Monitoring &e" + target.getName()
+                + " &7(world=&e" + monitor.worldName() + "&7, gamemode=&e" + monitor.gameMode()
+                + "&7, online=&e" + online + "&7)"));
+
+        StringBuilder flags = new StringBuilder();
+        if (monitor.isOnGround()) flags.append("onGround ");
+        if (monitor.isSprinting()) flags.append("sprint ");
+        if (monitor.isSneaking()) flags.append("sneak ");
+        if (monitor.isGliding()) flags.append("elytra ");
+        if (monitor.isSwimming()) flags.append("swim ");
+        if (monitor.isInVehicle()) flags.append("vehicle ");
+        if (monitor.isLevitation()) flags.append("levitation ");
+        if (monitor.isSlowFalling()) flags.append("slow-falling ");
+        if (monitor.speedPotionLevel() > 0) flags.append("speed-").append(monitor.speedPotionLevel()).append(' ');
+        if (flags.length() == 0) flags.append("none ");
+        sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
+                "&7  state: &e%s&7| ping=&e%.0fms&7 h-vel=&e%.2f b/s&7 v-vel=&e%.2f b/s",
+                flags.toString().trim(), monitor.pingEma(), monitor.velocityHorizontalEma(), monitor.velocityVerticalEma())));
+
+        sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
+                "&7  observations=&e%d&7 evidence=&e%d&7(cap %d)",
+                monitor.totalObservations(), monitor.evidenceCount(), ac.vigil.monitor.EvidenceStore.DEFAULT_CAPACITY)));
+
+        double lastDescent = monitor.lastLandingDescent();
+        sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
+                "&7  last landing: &e%.2f blocks&7 | teleport=&e%s velocity=&e%s fallDamage=&e%s otherDamage=&e%s",
+                lastDescent,
+                ageText(now, monitor.lastTeleportAt()),
+                ageText(now, monitor.lastVelocityAt()),
+                ageText(now, monitor.lastFallDamageAt()),
+                ageText(now, monitor.lastGenericDamageAt()))));
+
+        sender.sendMessage(Text.colorize("&7  checks (state vl conf evidence last-detection):"));
+        Map<String, Double> levels = data.getViolationLevelsSnapshot();
+        for (Check<?> check : plugin.getCheckManager().getAll()) {
+            String name = check.getName();
+            double vl = levels.getOrDefault(name, 0.0D);
+            double alertVl = 5.0D;
+            boolean enabled = true;
+            try {
+                var settings = plugin.getVigilacConfig().checkSettings(name);
+                if (settings != null) {
+                    alertVl = settings.getAlertVl();
+                    enabled = settings.isEnabled();
+                }
+            } catch (RuntimeException ignored) {
+                // keep defaults; rendering must never throw
+            }
+            ac.vigil.monitor.DetectionStatus status = monitor.status(name, vl, alertVl, enabled);
+            String stateColor = switch (status.state()) {
+                case VIOLATION -> "&c";
+                case SUSPECT -> "&e";
+                case EXEMPT -> "&b";
+                case DISABLED -> "&8";
+                default -> "&a";
+            };
+            StringBuilder line = new StringBuilder(String.format(java.util.Locale.US,
+                    "&7  %s: %s%s &7vl=&e%.2f &7conf=&e%.2f &7evidence=&e%d &7last=&e%s",
+                    name, stateColor, status.state(), vl, status.confidence(), status.evidenceCount(),
+                    ageText(now, status.lastDetectionAt())));
+            if (!status.exemptionReason().isEmpty()) {
+                line.append(" &7[exempt: &b").append(status.exemptionReason()).append("&7]");
+            }
+            sender.sendMessage(Text.colorize(line.toString()));
+        }
+
+        java.util.List<ac.vigil.monitor.Evidence> recent = monitor.evidenceSnapshot();
+        int shown = 0;
+        if (!recent.isEmpty()) {
+            sender.sendMessage(Text.colorize("&7  recent evidence (newest last, max 6):"));
+            for (int i = recent.size() - 1; i >= 0 && shown < 6; i--) {
+                ac.vigil.monitor.Evidence e = recent.get(i);
+                sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
+                        "&7    [%s] %s conf=%.2f src=%s %s",
+                        ageText(now, e.timeMillis()), e.type(), e.confidence(), e.source(),
+                        e.detail().length() > 64 ? e.detail().substring(0, 64) + "..." : e.detail())));
+                shown++;
+            }
+        }
+    }
+
+    private static String ageText(long now, long timestamp) {
+        if (timestamp <= 0L) {
+            return "never";
+        }
+        long age = Math.max(0L, now - timestamp);
+        if (age < 1_000L) {
+            return age + "ms";
+        }
+        if (age < 60_000L) {
+            return (age / 1_000L) + "s";
+        }
+        return (age / 60_000L) + "m" + ((age % 60_000L) / 1_000L) + "s";
+    }
+
     /** Resolves the optional [player] argument; defaults to the sender if a player. */
     private Player resolveTarget(CommandSender sender, String[] args, int index) {
         if (args.length > index) {
@@ -277,7 +394,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             return filter(SUBCOMMANDS, args[0]);
         }
         String sub = args[0].toLowerCase(Locale.ROOT);
-        if (args.length == 2 && (sub.equals("check") || sub.equals("violations") || sub.equals("debug") || sub.equals("exempt"))) {
+        if (args.length == 2 && (sub.equals("check") || sub.equals("violations") || sub.equals("debug") || sub.equals("exempt") || sub.equals("monitor"))) {
             return filter(onlineNames(), args[1]);
         }
         if (args.length == 3 && sub.equals("check")) {

@@ -89,6 +89,7 @@ public final class BlockBreakListener implements Listener {
                 .build();
 
         PlayerData data = dataManager.load(player.getUniqueId());
+        data.monitor().noteBreak(blockName);
         checkManager.evaluateBreak(context, data, pipeline.forPlayer(player, data));
     }
 

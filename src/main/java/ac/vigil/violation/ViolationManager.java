@@ -40,6 +40,8 @@ public final class ViolationManager {
             return Verdict.NONE;
         }
         double vl = data.addViolation(checkName, delta, s.getMaxVl());
+        data.monitor().noteViolation(checkName, vl, s.getAlertVl());
+        data.monitor().noteCheckEvidence(checkName, debug);
         Verdict verdict;
         if (s.getKickVl() > 0.0D && vl >= s.getKickVl()) {
             verdict = Verdict.KICK;

@@ -64,6 +64,7 @@ public final class BlockPlaceListener implements Listener {
                 .build();
 
         PlayerData data = dataManager.load(player.getUniqueId());
+        data.monitor().notePlace(null);
         checkManager.evaluatePlace(context, data, pipeline.forPlayer(player, data));
     }
 }

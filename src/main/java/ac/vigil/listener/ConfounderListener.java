@@ -31,15 +31,20 @@ public final class ConfounderListener implements Listener {
     public void onTeleport(PlayerTeleportEvent event) {
         PlayerData data = dataManager.get(event.getPlayer().getUniqueId());
         if (data != null) {
-            data.setTeleportGraceUntil(System.currentTimeMillis() + config.get().teleportGraceMillis());
+            long now = System.currentTimeMillis();
+            data.setTeleportGraceUntil(now + config.get().teleportGraceMillis());
+            data.monitor().noteTeleport(String.valueOf(event.getCause()));
         }
     }
 
     /**
-     * Any damage event on the player resets the no-fall streak. Registered
-     * independently of the move listener's ordering, so a normal falling
-     * player can never accumulate suspicious-landing evidence: the landing
-     * may be flagged for one tick, then the damage event zeroes the streak.
+     * Damage bookkeeping, separated by cause. ONLY fall damage resets the
+     * no-fall suspicious-landing streak: unrelated damage (zombies, lava,
+     * drowning) is recorded for the monitor but must never suppress fall
+     * evidence. The FALL case additionally serves as an ordering backstop —
+     * if the landing evaluation ran before the damage event on the same
+     * tick, the next landing re-checks the fall-damage signal and the grace
+     * window in NoFallCheck absorbs the tick skew.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
@@ -47,8 +52,13 @@ public final class ConfounderListener implements Listener {
             return;
         }
         PlayerData data = dataManager.get(player.getUniqueId());
-        if (data != null) {
-            data.setLastDamageAt(System.currentTimeMillis());
+        if (data == null) {
+            return;
+        }
+        boolean fall = event.getCause() == EntityDamageEvent.DamageCause.FALL;
+        data.setLastDamageAt(System.currentTimeMillis());
+        data.monitor().noteDamage(fall);
+        if (fall) {
             data.movementTracker().resetSuspiciousLandings();
         }
     }
@@ -62,6 +72,8 @@ public final class ConfounderListener implements Listener {
         double speed = event.getVelocity().length();
         // Stronger impulses deserve slightly longer grace, capped at 2 seconds.
         long grace = config.get().velocityGraceMillis() + (long) (speed * 100.0D);
-        data.setKnockbackGraceUntil(System.currentTimeMillis() + Math.min(grace, 2_000L));
+        long now = System.currentTimeMillis();
+        data.setKnockbackGraceUntil(now + Math.min(grace, 2_000L));
+        data.monitor().noteVelocity(speed);
     }
 }

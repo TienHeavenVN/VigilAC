@@ -52,15 +52,20 @@ class NoFallCheckTest {
                 .build();
     }
 
-    /** One full 5-block fall: 5 downward ticks of 1.0 each, then a landing tick. */
-    private void oneFall(long start, boolean damageOnLanding) {
+    /**
+     * One full 5-block fall: 5 downward ticks of 1.0 each, then a landing tick.
+     * damageOnLanding: 0 = none, 1 = FALL damage, 2 = non-FALL damage.
+     */
+    private void oneFall(long start, int damageOnLanding) {
         long now = start;
         for (int i = 0; i < 5; i++) {
             now += 50L;
             check.evaluate(airborne(-1.0D, now), data, sink());
         }
-        if (damageOnLanding) {
-            data.setLastDamageAt(now); // damage recorded just before the landing observation
+        if (damageOnLanding == 1) {
+            data.monitor().noteDamage(true); // FALL damage: exculpatory
+        } else if (damageOnLanding == 2) {
+            data.monitor().noteDamage(false); // non-FALL damage: must NOT excuse
         }
         now += 50L;
         check.evaluate(grounded(now), data, sink());
@@ -69,26 +74,36 @@ class NoFallCheckTest {
     @Test
     void fallingWithDamageNeverFlags() {
         for (int fall = 0; fall < 5; fall++) {
-            oneFall(1_000_000L + fall * 10_000L, true);
+            oneFall(1_000_000L + fall * 10_000L, 1);
         }
         assertTrue(flagged.isEmpty(), "fall damage on landing suppresses all evidence");
     }
 
     @Test
+    void unrelatedDamageDoesNotSuppressNoFallEvidence() {
+        // Non-fall damage between repeats must not reset the suspicious-landing streak:
+        // 3 impossible 5-block falls, each "protected" by unrelated damage, must still flag.
+        for (int fall = 0; fall < 3; fall++) {
+            oneFall(1_000_000L + fall * 10_000L, 2);
+        }
+        assertFalse(flagged.isEmpty(), "unrelated (non-fall) damage must not suppress NoFall evidence");
+    }
+
+    @Test
     void repeatedImpossibleLandingsFlag() {
         for (int fall = 0; fall < 3; fall++) {
-            oneFall(1_000_000L + fall * 10_000L, false);
+            oneFall(1_000_000L + fall * 10_000L, 0);
         }
         assertFalse(flagged.isEmpty(), "three consecutive 5-block landings without damage must flag");
     }
 
     @Test
     void singleImpossibleLandingDoesNotFlag() {
-        oneFall(1_000_000L, false);
-        oneFall(2_000_000L, true);  // damage this time resets the streak
-        oneFall(3_000_000L, false);
-        oneFall(4_000_000L, false);
-        oneFall(5_000_000L, false);
+        oneFall(1_000_000L, 0);
+        oneFall(2_000_000L, 1);  // fall damage this time resets the streak
+        oneFall(3_000_000L, 0);
+        oneFall(4_000_000L, 0);
+        oneFall(5_000_000L, 0);
         // landings: fall1 (streak 1), fall2 w/damage (streak reset), fall3 (1), fall4 (2), fall5 (3) -> flag on fall5
         assertFalse(flagged.isEmpty(), "after the reset, three consecutive suspicious landings flag");
     }

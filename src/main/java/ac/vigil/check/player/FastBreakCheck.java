@@ -63,6 +63,7 @@ public final class FastBreakCheck implements Check<BreakContext> {
                     ctx.getBlockType(), ctx.getHardness(), ctx.getPingMillis());
             tracker.resetImpossibleBreakStreak();
             tracker.noteBreak(now);
+            data.monitor().noteImpossibleBreak(debug);
             callback.onViolation(this, unbreakableVl, debug);
             return;
         }
@@ -73,6 +74,7 @@ public final class FastBreakCheck implements Check<BreakContext> {
 
         if (minMillis <= TICK_LEEWAY_MILLIS) {
             tracker.resetImpossibleBreakStreak();
+            data.monitor().noteExemption(getName(), "instant-break material (vanilla lower bound <= 50ms)");
             return; // instant-break material: no timing signal exists
         }
 
@@ -82,6 +84,8 @@ public final class FastBreakCheck implements Check<BreakContext> {
             return;
         }
 
+        data.monitor().noteImpossibleBreak(String.format(java.util.Locale.US,
+                "block=%s interval=%dms minimum=%dms", ctx.getBlockType(), interval, (long) minMillis));
         int streak = tracker.addImpossibleBreakStreak();
         if (streak < minImpossibleStreak) {
             return;
