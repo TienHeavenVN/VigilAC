@@ -5,6 +5,7 @@ import java.util.logging.Logger;
 import org.bukkit.plugin.java.JavaPlugin;
 import ac.vigil.data.PlayerData;
 import ac.vigil.data.PlayerDataManager;
+import ac.vigil.detection.AttackAttemptSnapshot;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;

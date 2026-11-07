@@ -83,9 +83,10 @@ class StepCheckBounceTest {
         check.evaluate(tick(y, -0.6D, now, false, false), data, sink());
         // Launch tick (would be a bounce)...
         check.evaluate(tick(y - 0.6D, 1.3D, now + 50, true, false), data, sink());
-        // ...then the arc accelerates upward: impossible ballistically.
-        check.evaluate(tick(y - 0.6D + 1.3D, 1.4D, now + 100, false, false), data, sink());
-        check.evaluate(tick(y - 0.6D + 2.7D, 1.2D, now + 150, false, false), data, sink());
+        // ...then the arc accelerates upward by more than the 0.22 block
+        // ballistic tolerance: impossible for a ballistic bounce.
+        check.evaluate(tick(y - 0.6D + 1.3D, 1.6D, now + 100, false, false), data, sink());
+        check.evaluate(tick(y - 0.6D + 2.9D, 1.5D, now + 150, false, false), data, sink());
         assertFalse(flagged.isEmpty(), "acceleration inside the arc breaks the bounce model and exposes the Step hack");
     }
 
