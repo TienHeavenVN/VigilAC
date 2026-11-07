@@ -21,6 +21,13 @@ echo "== load test: BOTS=$BOTS DURATION=${DURATION_SECONDS}s =="
 (cd "$ROOT" && ./gradlew shadowJar --no-daemon -q) || { echo '::error title=Build::shadowJar failed'; exit 1; }
 PAPER_VERSION="${PAPER_VERSION:-1.21.8}" "$ROOT/integration/paper.sh" "$SRV" "$PORT" 0 || { echo '::error title=Paper::setup failed'; exit 1; }
 
+# The stock server.properties caps max-players at 20; a BOTS>20 leg would silently
+# refuse the excess bots (observed: 25-bot leg plateaued at "20 of a max of 20 online").
+# Isolated CI-only server, so raising the cap here is safe.
+MAXP=$(( BOTS < 20 ? 20 : BOTS ))
+printf 'max-players=%d\n' "$MAXP" >> "$SRV/server.properties"
+echo "== max-players raised to $MAXP for this isolated load-test server =="
+
 echo "== booting server (with GC logging) =="
 cd "$SRV"
 nohup java -Xms1G -Xmx2G -Xlog:gc*:file=gc.log:time,uptime,tags -jar paper.jar nogui > server.log 2>&1 &
@@ -59,7 +66,7 @@ for i in $(seq 1 "$BOTS"); do
 done
 
 # sample CPU/RSS + RCON tps/mspt every 5s while the bots are in
-for t in 5 10 15 20 25 30 35 40 45; do
+for t in 5 15 25 35 45; do
   [ "$t" -gt "$DURATION_SECONDS" ] && break
   sleep 5
   RSS=$(ps -o rss= -p "$JPID" | tr -d ' ')
@@ -83,23 +90,22 @@ TPS1=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci tps | tail -1 | 
 MSPT1=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci mspt | tail -1 | tr '\n' ' ')
 VI=$(python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci "vigilac info" | tr '\n' '|')
 
-echo "::notice title=LoadPost::rss_kb=$RSS1 tps=[$TPS1] mspt=[$MSPT1] failed_bots=$FAILED_BOTS info=[${VI:0:400}]"
 DELTA_RSS=$(( (RSS1 - RSS0) / 1024 ))
 PER_PLAYER=$(( BOTS > 0 ? (RSS1 - RSS0) / BOTS / 1024 : 0 ))
-echo "::notice title=LoadMemory::total_growth_mb=$DELTA_RSS approx_per_player_mb=$PER_PLAYER"
+echo "::notice title=LoadPost::rss_kb=$RSS1 tps=[$TPS1] mspt=[$MSPT1] failed_bots=$FAILED_BOTS growth_mb=$DELTA_RSS per_player_mb=$PER_PLAYER info=[${VI:0:200}]"
 
 echo "== GC summary =="
 GCLINES=$(wc -l < gc.log 2>/dev/null || echo 0)
 GC_PAUSES=$(grep -c 'Pause' gc.log 2>/dev/null || echo 0)
 GC_TIME=$(awk '/Pause/ { for (i=1;i<=NF;i++) if ($i ~ /^[0-9.]+ms$/) { gsub("ms","",$i); s+=$i; n++ } } END { if (n>0) printf "%.1f", s; else print 0 }' gc.log 2>/dev/null)
-echo "::notice title=LoadGC::gc_log_lines=$GCLINES pauses=$GC_PAUSES approx_total_pause_ms=$GC_TIME"
+echo "::notice title=LoadGC::gc_log_lines=$GCLINES pauses=$GC_PAUSES approx_total_pause_ms=$GC_TIME stop_to_exit_ms=$STOP_MS"
 
 echo "== shutdown flush timing =="
 STOP_START=$(date +%s%N)
 python3 "$ROOT/tools/rcon.py" 127.0.0.1 25575 vigilac-ci stop > /dev/null 2>&1 || true
 for i in $(seq 1 60); do kill -0 "$JPID" 2>/dev/null || break; sleep 1; done
 STOP_END=$(date +%s%N)
-echo "::notice title=LoadShutdown::stop_to_exit_ms=$(( (STOP_END - STOP_START) / 1000000 ))"
+STOP_MS=$(( (STOP_END - STOP_START) / 1000000 ))
 grep -q 'Disabling VigilAC' server.log || { echo '::error title=PluginNotDisabled::Disabling VigilAC missing after stop'; exit 1; }
 ls -la plugins/VigilAC/vigilac-violations.db || { echo '::error title=StorageMissing::db not created'; exit 1; }
 grep -Ei 'exception|severe' server.log | grep -i vigilac && { echo '::error title=PluginException::vigilac logged exceptions'; exit 1; }

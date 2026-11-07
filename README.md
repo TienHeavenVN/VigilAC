@@ -122,15 +122,17 @@ vehicle/elytra/liquid/TPS/knockback/potion cases), the violation pipeline (VL ac
 verdict escalation, decay), the config validator, the SQLite storage layer (round-trip on a real
 file) and the packaging contract of `config.yml`/`plugin.yml`.
 
-CI also runs a **runtime smoke test**: it downloads the official Paper 1.21.8 build from
-`fill.papermc.io` (Fill v3 API), boots a headless server with VigilAC installed, drives `/plugins` and
-`/vigilac info` over RCON, and verifies clean enable/disable and the SQLite audit file — see
+CI also runs **runtime smoke tests**: headless Paper 1.21.8 (Java 21, `VigilAC.jar`) and headless Paper
+26.1.2 / 26.2 / 26.3 (Java 25, `VigilAC-26x.jar`) servers are booted, `/plugins` and `/vigilac info` are
+driven over RCON, and clean enable/disable plus the SQLite audit file are verified — see
 `.github/workflows/ci.yml`.
 
 ## Compatibility
 
 - **Paper 1.21.x**: see [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) — each version is compiled
   and unit-tested in CI's compatibility matrix; runtime validation is performed on 1.21.8.
+- **Paper 26.1.2 / 26.2 / 26.3 (Java 25, `VigilAC-26x.jar`)**: compiled, unit-tested and
+  boot-verified in CI; 26.1 and 26.1.1 are unsupported (unresolvable `paper-api`).
 - **Purpur**: expected to work (Paper-compatible fork) but **not tested**.
 - **Spigot**: not supported (uses Paper APIs such as `Server#getTPS()`).
 - **Folia**: **not supported**; the plugin uses the legacy scheduler API.
