@@ -10,9 +10,10 @@ import ac.vigil.ai.telemetry.AiFeatureSchema;
 import ac.vigil.ai.telemetry.AiFeatureSnapshot;
 
 /**
- * The onnxruntime library is NOT a dependency of this project. These tests pin down
- * the degrade-gracefully contract: absent runtime ⇒ UNAVAILABLE + reason, never a throw.
- * The happy path (runtime present + compatible model) is UNVERIFIED and untested.
+ * onnxruntime is a TEST-ONLY dependency (testImplementation). These tests pin down the
+ * degrade-gracefully contract: when the runtime is absent ⇒ UNAVAILABLE + reason, never
+ * a throw. The happy path (runtime present + compatible model) IS tested with a real
+ * ONNX Runtime in OnnxRuntimeEndToEndTest against a synthetic fixture model.
  */
 class OnnxRuntimeAnomalyModelTest {
 

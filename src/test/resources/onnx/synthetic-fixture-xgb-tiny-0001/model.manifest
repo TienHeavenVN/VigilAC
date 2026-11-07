@@ -1,0 +1,11 @@
+VigilAC-ModelManifest/1
+algorithm=ONNX
+formatVersion=1
+modelId=vigilac-xgb-fixture-tiny-0001
+artifact=model.onnx
+sha256=dd471800184e0a3fecc6c27d193b841b31c070b9b74bba7ebb61d2719c842c19
+featureSchemaHash=2f2b0a3eb4563552b5c995c285f7179ce34490c450c46b63e9dbc022916ee688
+featureCount=22
+normalization=none
+createdUtc=2026-11-07T17:02:45Z
+notes=TRAINED MODEL — provenance below; quality claims only via docs/AI_DATASET_EVALUATION.md; dataset_digest=408cf7b4854c48a54e17536aa9b058974adec7fb62bac5481fb202ce1084786c; split_seed=1337 n_train=16 n_val=8 n_test=0; fixture_only=yes — SYNTHETIC, MUST NOT BE LOADED IN PRODUCTION; normalization=none; input=float[1,22] raw (as clipped at extraction); single output anomaly_score=float[1,1] (class-1 probability); seed=1337

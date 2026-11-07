@@ -260,6 +260,9 @@ ai:
   inference-interval-seconds: 5
   # Directory (relative to the plugin data folder) with *.manifest + model artifacts.
   models-directory: ai-models
+  # Empty = load every verified model. Set a modelId here to roll back to a single
+  # known-good model: all other manifests are skipped without their artifacts being read.
+  active-model-id: ''
   # Shadow anomaly score at/above which deterministic corroboration counts as AI corroboration.
   isolation-forest-threshold: 0.6
   # Enforced: ML scores can never corroborate themselves; deterministic evidence is required for MEDIUM+.

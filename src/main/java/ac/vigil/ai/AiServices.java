@@ -92,7 +92,12 @@ public final class AiServices {
             return;
         }
         Path modelsDir = baseDirectory.resolve(config.modelsDirectory());
-        this.loadedModels = ModelRegistry.loadFromDirectory(modelsDir);
+        boolean rollback = !config.activeModelId().isEmpty();
+        this.loadedModels = ModelRegistry.loadFromDirectory(modelsDir, config.activeModelId());
+        if (rollback) {
+            logger.info("[ai] rollback filter active: ai.active-model-id=" + config.activeModelId()
+                    + " — only that model is loaded; others are skipped without being read");
+        }
         List<AnomalyModel> usable = new ArrayList<>();
         for (ModelRegistry.LoadedModel loaded : loadedModels) {
             if (loaded.loaded()) {
@@ -303,6 +308,9 @@ public final class AiServices {
         String reason = null;
         if (!config.enabled()) {
             reason = "disabled by config (ai.enabled=false)";
+        } else if (!config.activeModelId().isEmpty() && loadedModels.stream().noneMatch(ModelRegistry.LoadedModel::loaded)) {
+            reason = "rollback filter ai.active-model-id=" + config.activeModelId()
+                    + " matches no loadable model — shadow scoring inactive; deterministic engine unaffected";
         } else if (loadedModels.isEmpty()) {
             reason = "no models loaded — shadow scoring inactive; deterministic engine unaffected";
         } else {

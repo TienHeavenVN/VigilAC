@@ -53,6 +53,19 @@ public final class ModelRegistry {
      * AI simply has no models). Never throws.
      */
     public static List<LoadedModel> loadFromDirectory(Path directory) {
+        return loadFromDirectory(directory, "");
+    }
+
+    /**
+     * Same as {@link #loadFromDirectory(Path)} with an optional rollback filter:
+     * when {@code activeModelId} is non-blank, only manifests whose modelId matches
+     * are read and loaded; every other model is reported as
+     * {@code skipped (ai.active-model-id)} and its artifact is never read.
+     * This is the supported rollback path: point {@code ai.active-model-id} at a
+     * previously known-good version to revert immediately without deleting files.
+     * Never throws.
+     */
+    public static List<LoadedModel> loadFromDirectory(Path directory, String activeModelId) {
         List<LoadedModel> out = new ArrayList<>();
         if (directory == null || !Files.isDirectory(directory)) {
             return out;
@@ -63,10 +76,40 @@ public final class ModelRegistry {
         } catch (IOException e) {
             return out;
         }
+        String filter = activeModelId == null ? "" : activeModelId.trim();
         for (Path manifestPath : manifests) {
+            if (!filter.isEmpty()) {
+                // Peek at the modelId cheaply: full validation still happens in loadOne;
+                // here we only decide whether to READ this model at all. Parse failures
+                // on peek fall through to loadOne to surface the real reason.
+                String peeked = peekModelId(manifestPath);
+                if (peeked != null && !peeked.equals(filter)) {
+                    out.add(new LoadedModel(manifestPath.getFileName().toString(), null, null,
+                            "skipped (ai.active-model-id=" + filter + "; model id " + peeked + ")"));
+                    continue;
+                }
+            }
             out.add(loadOne(manifestPath));
         }
         return out;
+    }
+
+    /** Lightweight modelId extraction for the rollback filter; null when unreadable (loadOne will report it). */
+    private static String peekModelId(Path manifestPath) {
+        try {
+            byte[] bytes = Files.readAllBytes(manifestPath);
+            String text = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            for (String line : text.split("\r?\n")) {
+                String trimmed = line.trim();
+                if (trimmed.regionMatches(true, 0, "modelId=", 0, "modelId=".length())) {
+                    String value = trimmed.substring("modelId=".length()).trim();
+                    return value.isEmpty() ? null : value;
+                }
+            }
+            return null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
     }
 
     private static LoadedModel loadOne(Path manifestPath) {

@@ -28,6 +28,9 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.46.1.3")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
+    // Test-only: REAL ONNX Runtime for the end-to-end adapter contract test.
+    // Never shipped, never required at plugin runtime (the adapter probes reflectively).
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.31.1")
     testImplementation("org.yaml:snakeyaml:2.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

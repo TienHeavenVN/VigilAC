@@ -103,11 +103,12 @@ class ConfigResourceTest {
         assertEquals(Boolean.TRUE, ai.get("shadow-mode"), "ai.shadow-mode must default to true");
         for (String key : List.of("max-queue-size", "worker-threads", "inference-timeout-millis",
                 "inference-interval-seconds", "models-directory", "isolation-forest-threshold",
-                "require-deterministic-corroboration", "min-combat-samples")) {
+                "require-deterministic-corroboration", "min-combat-samples", "active-model-id")) {
             assertTrue(ai.containsKey(key), "ai." + key + " is required by the code");
         }
         assertEquals(Boolean.TRUE, ai.get("require-deterministic-corroboration"),
                 "ML corroboration requirement must default to true");
+        assertEquals("", ai.get("active-model-id"), "active-model-id must default to empty (no rollback filter)");
         Map<String, Object> assistant = castMap(ai.get("admin-assistant"));
         assertNotNull(assistant, "ai.admin-assistant section required");
         assertEquals(Boolean.FALSE, assistant.get("enabled"), "admin assistant must default to false");

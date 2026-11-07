@@ -19,6 +19,8 @@ import java.util.List;
  *   <li>{@code models-directory: ai-models} — resolved against the plugin data folder</li>
  *   <li>{@code isolation-forest-threshold: 0.6} — shadow score threshold for correlate corroboration</li>
  *   <li>{@code require-deterministic-corroboration: true} — enforced true; see AiEvidenceCorrelator</li>
+ *   <li>{@code active-model-id: ""} — empty loads every verified model; set a modelId to roll back
+ *       (only that model is loaded; everything else is skipped without being read)</li>
  *   <li>{@code min-combat-samples: 20}</li>
  *   <li>{@code admin-assistant.enabled: false}</li>
  *   <li>{@code admin-assistant.llm.enabled: false}, {@code admin-assistant.llm.endpoint: ""},
@@ -38,6 +40,7 @@ public final class AiConfig {
     private final String modelsDirectory;
     private final double mlThreshold;
     private final boolean requireDeterministicCorroboration;
+    private final String activeModelId;
     private final int minCombatSamples;
     private final boolean adminAssistantEnabled;
     private final boolean llmEnabled;
@@ -55,6 +58,7 @@ public final class AiConfig {
         this.modelsDirectory = source.getString("ai.models-directory", DEFAULT_MODELS_DIR);
         this.mlThreshold = clampDouble(source.getDouble("ai.isolation-forest-threshold", 0.6D), 0.0D, 1.0D);
         this.requireDeterministicCorroboration = source.getBoolean("ai.require-deterministic-corroboration", true);
+        this.activeModelId = source.getString("ai.active-model-id", "").trim();
         this.minCombatSamples = clamp(source.getInt("ai.min-combat-samples", 20), 1, 10_000);
         this.adminAssistantEnabled = source.getBoolean("ai.admin-assistant.enabled", false);
         this.llmEnabled = source.getBoolean("ai.admin-assistant.llm.enabled", false);
@@ -93,6 +97,8 @@ public final class AiConfig {
     public String modelsDirectory() { return modelsDirectory; }
     public double mlThreshold() { return mlThreshold; }
     public boolean requireDeterministicCorroboration() { return true; } // enforced
+    /** Empty = load all verified models; a modelId restricts loading to that model (rollback filter). */
+    public String activeModelId() { return activeModelId; }
     public int minCombatSamples() { return minCombatSamples; }
     public boolean adminAssistantEnabled() { return adminAssistantEnabled; }
     public boolean llmEnabled() { return llmEnabled; }

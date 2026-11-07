@@ -62,6 +62,7 @@ class AiConfigTest {
         assertEquals(5, config.inferenceIntervalSeconds());
         assertEquals(AiConfig.DEFAULT_MODELS_DIR, config.modelsDirectory());
         assertEquals(0.6D, config.mlThreshold(), 1e-9);
+        assertEquals("", config.activeModelId(), "active-model-id must default to empty (no rollback filter)");
         assertTrue(config.requireDeterministicCorroboration(), "corroboration is enforced true");
         assertEquals(20, config.minCombatSamples());
         assertFalse(config.adminAssistantEnabled(), "admin assistant must default to disabled");
@@ -81,6 +82,12 @@ class AiConfigTest {
         assertEquals(4, config.workerThreads(), "worker threads clamp to 4");
         assertEquals(1, config.maxQueueSize(), "queue clamps to >= 1");
         assertEquals(1.0D, config.mlThreshold(), 1e-9, "threshold clamps to [0,1]");
+    }
+
+    @Test
+    void activeModelIdOverrideIsHonored() {
+        AiConfig config = new AiConfig(new MapSource().with("ai.active-model-id", "forest-2026-11"));
+        assertEquals("forest-2026-11", config.activeModelId());
     }
 
     @Test
