@@ -133,19 +133,19 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Resolve paper-api 26.2 (existence probe)
+      - name: Resolve paper-api 26.1.2.build.74-stable (existence probe)
         run: |
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/26.2-R0.1-SNAPSHOT/maven-metadata.xml")
-          echo "paper-api/26.2-R0.1-SNAPSHOT maven-metadata HTTP $CODE"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/26.1.2.build.74-stable/paper-api-26.1.2.build.74-stable.pom")
+          echo "paper-api 26.1.2.build.74-stable pom HTTP $CODE"
           if [ "$CODE" != "200" ]; then
-            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:26.2-R0.1-SNAPSHOT is not resolvable on repo.papermc.io (HTTP $CODE)"
+            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:26.1.2.build.74-stable is not resolvable on repo.papermc.io (HTTP $CODE)"
             exit 1
           fi
 
-      - name: Compile against paper-api 26.2 (release 25)
+      - name: Compile against paper-api 26.1.2.build.74-stable (release 25; lowest supported 26.x API)
         run: |
           set +e
-          ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.2-R0.1-SNAPSHOT -PjavaRelease=25 -PartifactName=VigilAC-26x > compile.log 2>&1
+          ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.1.2.build.74-stable -PjavaRelease=25 -PartifactName=VigilAC-26x > compile.log 2>&1
           code=$?
           tail -n 30 compile.log
           if [ $code -ne 0 ]; then
@@ -193,20 +193,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { paper: '1.21',    jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.1',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.3',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.4',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.5',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.6',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.7',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.8',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.9',  jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.10', jdk: '21', javaRelease: '21' }
-          - { paper: '1.21.11', jdk: '21', javaRelease: '21' }
-          # 26.x targets build against paper-api with --release 25 (JDK 25 required).
-          - { paper: '26.1.2',  jdk: '25', javaRelease: '25' }
-          - { paper: '26.2',    jdk: '25', javaRelease: '25' }
+          - { paper: '1.21',  api: '1.21-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.1',  api: '1.21.1-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.3',  api: '1.21.3-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.4',  api: '1.21.4-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.5',  api: '1.21.5-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.6',  api: '1.21.6-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.7',  api: '1.21.7-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.8',  api: '1.21.8-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.9',  api: '1.21.9-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.10', api: '1.21.10-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.11', api: '1.21.11-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          # 26.x targets: exact stable paper-api coordinates (the -R0.1-SNAPSHOT
+          # naming does not exist for 26.x; Paper publishes <version>.build.<n>-stable).
+          # JDK 25 + --release 25 required.
+          - { paper: '26.1.2',  api: '26.1.2.build.74-stable', jdk: '25', javaRelease: '25' }
+          - { paper: '26.2',    api: '26.2.build.135-stable', jdk: '25', javaRelease: '25' }
+          - { paper: '26.3',    api: '26.3.build.244-stable', jdk: '25', javaRelease: '25' }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -220,19 +223,24 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Resolve paper-api (existence probe)
+      - name: Resolve paper-api ${{ matrix.api }} (existence probe)
         run: |
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/${{ matrix.paper }}-R0.1-SNAPSHOT/maven-metadata.xml")
-          echo "paper-api/${{ matrix.paper }}-R0.1-SNAPSHOT maven-metadata HTTP $CODE"
+          if printf '%s' "${{ matrix.api }}" | grep -q -- '-SNAPSHOT'; then
+            URL="https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/${{ matrix.api }}/maven-metadata.xml"
+          else
+            URL="https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/${{ matrix.api }}/paper-api-${{ matrix.api }}.pom"
+          fi
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "paper-api ${{ matrix.api }} probe HTTP $CODE ($URL)"
           if [ "$CODE" != "200" ]; then
-            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:${{ matrix.paper }}-R0.1-SNAPSHOT is not resolvable on repo.papermc.io (HTTP $CODE)"
+            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:${{ matrix.api }} is not resolvable on repo.papermc.io (HTTP $CODE)"
             exit 1
           fi
 
       - name: Compile against paper-api ${{ matrix.paper }}
         run: |
           set +e
-          ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT -PjavaRelease=${{ matrix.javaRelease }} > compile.log 2>&1
+          ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} > compile.log 2>&1
           code=$?
           tail -n 25 compile.log
           if [ $code -ne 0 ]; then
@@ -245,7 +253,7 @@ jobs:
       - name: Unit tests against paper-api ${{ matrix.paper }}
         run: |
           set +e
-          ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT -PjavaRelease=${{ matrix.javaRelease }} > test.log 2>&1
+          ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} > test.log 2>&1
           code=$?
           tail -n 25 test.log
           if [ $code -ne 0 ]; then
@@ -326,10 +334,27 @@ jobs:
               print(f'::notice title=PaperApiListed-{family}::count={len(hits)} latest={hits[-3:]}')
           PYEOF
 
+      - name: Probe exact 26.x paper-api artifacts used by this workflow
+        run: |
+          set -uo pipefail
+          for V in 26.1.2.build.74-stable 26.2.build.135-stable 26.3.build.244-stable; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/$V/paper-api-$V.pom")
+            echo "paper-api $V pom HTTP $CODE"
+            if [ "$CODE" != "200" ]; then
+              echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:$V does not resolve (HTTP $CODE)"
+              exit 1
+            fi
+          done
+          # Known-unavailable coordinates (expected 404; printed loudly, never silently ignored)
+          for V in "26.1-R0.1-SNAPSHOT" "26.1.1-R0.1-SNAPSHOT" "26.1-R0.1" "26.1.1-R0.1"; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/$V/maven-metadata.xml")
+            echo "::notice title=Probe-KnownMissing::paper-api $V maven-metadata HTTP $CODE (expected 404 — no published artifact)"
+          done
+
       - name: Probe Fill v3 for 26.x STABLE builds (server jar availability)
         run: |
           set -uo pipefail
-          for V in 26.1.2 26.2; do
+          for V in 26.1.2 26.2 26.3; do
             CODE=$(curl -sS --retry 2 --retry-delay 1 -H "User-Agent: VigilAC-CI/1.0.0 (github.com/TienHeavenVN/VigilAC)" -w '%{http_code}' -o "fill-$V.json" "https://fill.papermc.io/v3/projects/paper/versions/$V/builds") || CODE="curl-failed"
             echo "Fill v3 versions/$V/builds HTTP $CODE"
             head -c 400 "fill-$V.json"; echo
@@ -414,8 +439,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { paper: '1.21.8', jdk: '21', paperApiVersion: '1.21.8-R0.1-SNAPSHOT', javaRelease: '21', artifactName: 'VigilAC' }
-          - { paper: '26.2',   jdk: '25', paperApiVersion: '26.2-R0.1-SNAPSHOT',   javaRelease: '25', artifactName: 'VigilAC-26x' }
+          # 1.21.x leg builds the default artifact; 26.x legs build VigilAC-26x
+          # once against the lowest supported 26.x API (26.1.2) and boot it on
+          # every supported 26.x runtime — empirical cross-minor binary-compat check.
+          - { paper: '1.21.8', jdk: '21', buildApi: '1.21.8-R0.1-SNAPSHOT',   javaRelease: '21', artifactName: 'VigilAC' }
+          - { paper: '26.1.2', jdk: '25', buildApi: '26.1.2.build.74-stable', javaRelease: '25', artifactName: 'VigilAC-26x' }
+          - { paper: '26.2',   jdk: '25', buildApi: '26.1.2.build.74-stable', javaRelease: '25', artifactName: 'VigilAC-26x' }
+          - { paper: '26.3',   jdk: '25', buildApi: '26.1.2.build.74-stable', javaRelease: '25', artifactName: 'VigilAC-26x' }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -430,7 +460,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build plugin (${{ matrix.artifactName }})
-        run: ./gradlew shadowJar --no-daemon -q -PpaperApiVersion=${{ matrix.paperApiVersion }} -PjavaRelease=${{ matrix.javaRelease }} -PartifactName=${{ matrix.artifactName }}
+        run: ./gradlew shadowJar --no-daemon -q -PpaperApiVersion=${{ matrix.buildApi }} -PjavaRelease=${{ matrix.javaRelease }} -PartifactName=${{ matrix.artifactName }}
 
       - name: Download Paper ${{ matrix.paper }} (Fill v3 API, SHA-256 verified)
         env:
