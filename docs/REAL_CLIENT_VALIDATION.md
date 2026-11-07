@@ -68,3 +68,19 @@ Legend: **UNABLE-TO-TEST** (environment) — not evaluated; no claim made.
    written protocol, capturing the same fields listed under Methodology.
 4. At minimum, this matrix must be executed for `speed`, `fly`, `timer`, `reach`, `kill-aura` and
    `aim-assist` before any "real-client verified" claim can be attached to a check.
+
+## Phase 7 note (2026-11-07)
+
+Unchanged and reaffirmed: **REAL_CLIENT_VALIDATION = BLOCKED** for every check.
+Phase 7 adds these items to the manual matrix once a real client is available:
+
+- 1.21.11+ spear reach: verify the `attack_range` component is read (debug
+  `source=component`) and the spear at its true range does not accrue VL;
+  attack attempts on a held, mis-aimed spear produce `reach-attempt` evidence
+  without damage neither accrues nor exonerates by itself.
+- 26.2: rerun the full Phase 6 manual protocol plus mace Wind Burst and
+  riptide-trident water arcs against `jesus`, `step`, `no-fall`.
+- High-ping (300 ms) PvP vs strafing target: confirm no `reach` VL accrues
+  (or evaluate the opt-in `lag-compensation` calibration).
+
+No environment change removes these cells from UNABLE-TO-TEST in this sandbox.

@@ -92,11 +92,23 @@ Any attack inside the cap resets the consecutive counter.
 
 **False-positive analysis.**
 
-- Latency does **not** raise reach: the server evaluates positions at packet receipt time, and a
-  latency-lagged attacker is processed at a position no closer than when they swung; the client-side
-  advantage is self-defeating here. No ping-based slack is added (0.03 covers float error only).
+- Latency neither exonerates nor convicts by fiat. For a *stationary* target, a latency-lagged
+  attacker is evaluated at the position the server last knew, which is generally not closer than at
+  swing time. For a **moving** target the receipt-time distance can be *larger* than the swing-time
+  distance (e.g. the target strafing away at 5.6 b/s adds ~1.7 apparent blocks at 300 ms ping). The
+  symmetric case shrinks apparent distance, comfortably clearing the attacker. The old claim
+  "latency can only shrink reach" was backwards and is corrected here (Phase 7 / AUDIT-08).
+- Phase 7 adds packet-level evidence separate from damage events: the reach check sees
+  **attack attempts** (INTERACT_ENTITY ATTACK on ≤1.21.x, ATTACK on 26.1+) alongside damage events,
+  so a lagged/held attack that never registers damage no longer grants a silent free pass and is
+  recorded as attempt evidence. Damage-event reach remains authoritative for VL; attempts are
+  evidence + sustain the streak, and unknown reach items never convict (conservative).
+- Reach limit is **item-specific** on 1.21.11+ (weapon attack-range component): unknown or
+  unexpected component values fall back to the configured cap (default 3.0), never above it —
+  no component value is ever invented. Spears on 1.21.11+ are therefore NOT automatically given
+  4.5 blocks; until the component value is read from the real item, spear reach stays conservative.
+  Real 1.21.11 component values are UNVERIFIED in this environment.
 - Creative/spectator are exempt (flight makes 3.0 meaningless); attackers in vehicles are exempt.
-- High-latency attacks teleport-perceived *closer*, so latency exonerates rather than incriminates.
 - Entity boxes scale by type (a zombie cube is bigger than a player's), so small mobs are still
   correctly measurable against their own box.
 
@@ -158,6 +170,10 @@ streak; vl-per-landing (default 1.5) accrues once the streak reaches `min-suspic
 (default 3). Any legal landing or damage event resets the streak. Descent accumulated during
 Slow Falling / Levitation / other exempt states is discarded, never attributed.
 
+**Correlation notes (Phase 7 / AUDIT-09).** The advisory `corr=` label now uses per-factor
+suppression windows — teleport ≤ 2 s, velocity ≤ 1.5 s, fall damage ≤ 1.5 s, world change ≤ 2 s
+(was a uniform 15 s). Advisory only; it never gates VL.
+
 **Server-collision probe (v2, Phase 6).** On a suspicious landing the feet columns are probed for
 solid blocks at the feet layer and the layer below (`BlockSupportProbe`;
 `BukkitBlockSupportProbe` in production). If **no** corner column has support, the client claimed
@@ -208,6 +224,14 @@ Jump arcs over water: feet dip into liquid between arcs, resetting the streak �
 repeated arcs cannot reach 14. Standing still above water is equally impossible in
 vanilla and is flagged by the same rule.
 
+**Riptide / Wind Burst (Phase 7 / AUDIT-04).** Bounded, evidence-based exemptions:
+the check resets (not just suspends) its streak while the server reports the player is
+`isRiptiding`, and while a **vertical-dominant** impulse (|vy| > 0.45 blocks/tick and
+> 60 % of horizontal speed) is fresh — set from the velocity listener, window ≤ 3 s,
+and **never** set from lateral knockback. Both revert exactly like entering liquid; no
+general water bypass was added. Wind-burst grace carries into Jesus, NoFall streak
+logic, and Step, mirroring the mace 1.21+ mechanics.
+
 **Known limits.** Waterlogged top slabs read as WATER material at the
 below-block lookup; standing on one can supply surface ticks. The 14-tick gate keeps
 this from firing on its own. A frost-walker switch-off (boots removed mid-stream)
@@ -225,12 +249,15 @@ impossibilities (`min-streak`, default 2) are required before VL accrues, each a
 Levitation, vehicles, elytra and teleports are exempt. Stairs/half slabs (0.5),
 carpet (0.125) are far under the threshold.
 
-**Known limits.** Jump Boost VI+ opening ticks exceed 0.95 (0.42 + 0.1 per level): a
-single JB VI arc contributes one streak tick (which resets at the apex), so it can
-never cross the 2-tick streak gate on its own — this is pinned by a unit test.
-Sneak-charged full slime-bounces can exceed 0.95 on the launch tick; likewise gated
-by the streak requirement. Both are documented rather than exempt because exempting
-them would blind the check to the hack.
+**Slime / honey bounces (Phase 7 / AUDIT-05).** Vanilla slime-block bounces exceed
+0.95 for three consecutive ticks (`v = sqrt(2·0.08·h)`, e.g. h = 6 ⇒ 0.98 ≈ 1.13, 1.05,
+0.97), so the old "one streak tick per bounce" claim was wrong. Instead of exempting
+all slippery movement forever, the check runs a **bounded evidence state machine** on
+slippery ground: the first three qualifying ticks accumulate bounce evidence (dy
+decaying 1.13 → 1.05 → 0.97), a 4th qualifying tick without another fall resets and
+counts as normal evidence; sustained upward motion on slippery ground beyond the decay
+pattern is machine-like and still accrues VL. Non-slippery full blocks are unaffected.
+The JB VI ceiling is likewise pinned by a unit test (single arc ticks reset at the apex).
 
 
 ## `kill-aura` — multi-target attacks (v2, Phase 6)
@@ -247,9 +274,13 @@ them would blind the check to the hack.
 4. **Swingless attacks** (packetevents) — ≥ 6 attempts and attempts > 2× arm swings (a client
    attacking without swinging). Inert when packetevents is absent.
 
-**Evidence.** VL accrues only when the anchor holds AND the total signal count reaches 2.
-`vl-per-trigger` (default 1.0) VL, scaling with signal count (up to 2.0×). The plain
-"3 distinct entities in 1 s" verdict from Phase 5 **no longer exists**; anchor alone never flags.
+**Evidence (v3, Phase 7 / AUDIT-16).** VL accrues only when the anchor holds AND
+(`metronomic` OR `swingless`). Signal 3 (attempt rate, ≥ 8/s) contributes to the
+`vl-per-trigger` multiplier (`min(2, 1 + 0.5·(signals−2))`) but **never** satisfies the
+gate by itself — anchor + high-rate damage to farm-style partners cannot convict.
+Anchor alone never flags; anchor + attempt rate alone never flags (pinned by test
+`anchorPlusAttemptRateWithSwingsDoesNotFlag`). The plain "3 distinct entities in 1 s"
+verdict from Phase 5 **no longer exists**.
 
 **False-positive analysis.** Mob farms cannot supply regularity (human farm clicks are noisy) nor
 8+ attacks/s sustained against distinct entities at cooldown-limited damage rates. Sweep-edge
@@ -267,16 +298,18 @@ corroborator (by design).
 trailing `window` (default 20) attacks as `count / span` (span-capped at the window), which is
 meaningful at any attack rate.
 
-**Evidence.** Two gates, either sufficient for VL:
+**Evidence (Phase 7 / AUDIT-06).** Two gates:
 
-1. **Ceiling**: the stronger of damage-CPS and packetevents attempt-rate above `cps-cap`
-   (default 20.5, hardware ceiling ~20) with at least `min-samples` (default 10) samples on the
-   corresponding stream. The attempt-rate half covers uncharged spam whose damage events
-   vanish under the 1.21.2+ server cooldown.
+1. **Ceiling (machine-corroborated)**: the stronger of damage-CPS and packetevents attempt-rate
+   above `cps-cap` (default **25.0** — butterfly/jitter and Android multi-finger tapping are
+   documented at 20–30 CPS, well above the old 20.5 default) **and** stddev below
+   `robotic-stddev-max` (documented human tapping is noisy; a flat cap never convicts on rate).
+   The attempt-rate half covers uncharged spam whose damage events vanish under the 1.21.2+
+   server cooldown.
 2. **Metronome**: mean interval below `robotic-mean-max` (default 150 ms) with standard deviation
    below `robotic-stddev-max` (default 12 ms) sustained for `robotic-min-streak` (default 5)
-   qualifying windows of `robotic-min-samples` (default 10). Human variance is 40-120 ms stddev;
-   clickers converge on 0-10 ms. Debug output now includes interval CV and Shannon entropy.
+   qualifying windows of `robotic-min-samples` (default 10). Debug output includes interval CV and
+   Shannon entropy (telemetry only, never gates).
 
 **False-positive analysis.** Butterfly clicking and jitter clicking rarely exceed ~18 CPS and
 never hold stddev < 12 ms over 50+ clicks; the gates are stacked precisely so legitimate burst
@@ -284,12 +317,16 @@ spam is invisible and only sustained inhuman rhythm accrues VL.
 
 ## `aim-assist` — rotation teleports snapping to targets (v2, Phase 6)
 
-**Signal.** Each attack records the attacker's yaw/pitch. A **snap** is a rotation delta above
-`snap-angular-delta` (default 45°) where the attack's aim lands within `snap-angle-to-target`
-(default 6°) of the **nearest point of the target's bounding box** (not its centroid — enderman
-legs qualify). The swing is measured either from the packetevents rotation stream over the
-`snap-max-interval-millis` (default 120 ms) before the attack, or — when packetevents is absent —
-from the previous attack's rotation (pre-v2 behaviour).
+**Signal (Phase 7 / AUDIT-03/07).** Each attack records the attacker's yaw/pitch. A **snap**
+is the single **largest rotation burst** (hypot of consecutive-samples' angular delta — the
+sum is deliberately no longer used) above `snap-angular-delta` (default 45°) within the last
+`snap-max-interval-millis` (default 120 ms), where the attack's aim lands within
+`snap-angle-to-target` (default 6°) of the **nearest point of the target's bounding box**
+(not its centroid — enderman legs qualify). The attack-rate interval in debug output and the
+fallback path are computed from `previousAttackAtMillis` captured **before** the attack is
+recorded — the old `lastAttackAgeMillis(now)` read was always ~0 (AUDIT-07). Flick-and-return
+motion yields 2× burst evidence but never accumulates toward the gate (pinned by
+`RotationTrackerMaxDeltaTest#flickAndReturnDoesNotAccumulate`).
 
 **Evidence.** `min-snap-streak` (default 4) consecutive snaps each add `vl-per-snap` (default 1.0)
 VL. A swing that resets onto a target after a legitimate look-turn (>120 ms, or attack after a real
@@ -329,26 +366,34 @@ the 7.0 ceiling flags only bursts past it, so borderline speedrunners may occasi
 
 ## `fast-break` — breaking below the vanilla hardness bound (v2, Phase 6)
 
-**Signal.** Two paths:
+**Signal (Phase 7 / AUDIT-01/14/15).** Two paths, both now using a shared pure vanilla
+break-time model (`BreakTimeModel`):
 
-* **Path A — digging lifecycle (packetevents installed).** The break is matched against the
-  server-observed dig start (`START_DIGGING` → `FINISHED_DIGGING`). The expected duration uses the
-  full vanilla modifier stack (`BreakContext#expectedBreakMillis`): hardness, correct tool,
-  Efficiency, Haste, Mining Fatigue (0.3^level), ÷5 underwater without Aqua Affinity, ÷5 off-ground
-  — `t = hardness × 1.5 ÷ speedMultiplier` (×5 for the wrong tool). Deficits credit a decaying
-  penalty bucket (half-life 3 s); VL needs the bucket to exceed `penalty-grace-millis`
-  (default 1500 ms). A tool or destroy-direction change mid-dig marks the dig inconclusive —
-  no timing verdict, debug evidence only.
-* **Path B — fallback (no packetevents).** Completion-interval heuristic, unchanged:
-  `t = hardness × 1.5 ÷ speedMultiplier`, speeds 1 + (eff+1)², `×(1 + 0.2·haste)`. Completions
-  faster than the bound (50 ms leeway) are *impossible*; `min-impossible-streak` (default 3)
-  consecutive impossibles before VL (`vl-per-trigger` default 1.0).
+* Tool mining speeds are modelled: wood 2 / stone 4 / iron 6 / gold 12 / diamond 8 /
+  netherite 9. `destroySpeed = toolSpeed + (eff>0 ? eff² + 1 : 0)` (Efficiency bonus only
+  with a correct/effective tool, cap eff V), then × `(1 + 0.2·Haste)` (cap IV),
+  × `0.3^Fatigue` (cap IV), × 0.2 underwater without Aqua Affinity, × 0.2 off ground.
+  Wrong family ⇒ fixed 5× divisor (never suppressed). Cost: `millis = hardness ×
+  (canHarvest ? 1.5 : 5.0) / destroySpeed`.
+* `BreakTimeModel.forMaterial` maps held-item names to tiers; **unmapped/unknown correct tools
+  (hand, modded, copper-era) suppress the timing verdict entirely** — no bucket credit, no
+  streak, no VL (never an invented speed). Wrong-tool and unknown **family-for-block** cases
+  never suppress.
+* **Path A — digging lifecycle (packetevents installed).** Break matched to the server-observed
+  dig start→finish. Deficits credit a decaying penalty bucket (half-life 3 s); VL needs the
+  bucket to exceed `penalty-grace-millis` (default 1500 ms). Tool/destroy-direction changes ⇒
+  inconclusive, no timing verdict, debug evidence only.
+* **Path B — fallback (no packetevents).** Completion-interval heuristic with the same model:
+  completions faster than the floor are *impossible*; `min-impossible-streak` (default 3) before
+  VL (`vl-per-trigger` default 1.0).
+* Creative/spectator breaks are skipped (instant in vanilla — no survival evidence exists).
 
 **Evidence.** Server-reported unbreakable material (hardness < 0, e.g. bedrock) completing is
 unconditionally `unbreakable-vl` (default 6.0).
 
-**False-positive analysis.** Efficiency V + Haste II on stone is ~33 ms — inside the leeway band,
-never flagged. Wrong tool on stone is ~1725 ms. Instant-break materials (hardness 0) carry no
-timing signal and are skipped. Piston-broken blocks emit no BreakEvent from the player
+**False-positive analysis.** Efficiency V + Haste II on stone is ~46 ms (speed 35 × 1.4,
+t = 2.25/49 s) — inside the leeway band, never flagged. Wrong tool on stone (hand) is
+`hardness × 5.0 / 1.0` = 7.5 s — easily diagnosable, never suppressed. Instant-break materials
+(hardness 0) carry no timing signal and are skipped. Piston-broken blocks emit no BreakEvent from the player
 (piston-caused drops do not fire PlayerInteractEvent/BlockBreakEvent for the player), so
 ace-of-spam is not a false trigger.

@@ -65,3 +65,24 @@ The 50-bot dip matches the Phase 5 and pre-jesus/step (`f7bde96`) signatures on 
 same shared CI runners — within run-to-run noise. No detectable regression from the
 two new checks (they add ~2 integer increments and two comparisons per move event).
 The packetevents caveat above still applies to these runs.
+
+---
+
+## Phase 7 notes (2026-11-07) — no measurements exist
+
+Phase 7 added hot-path work; **no load benchmark was run** (no JDK, no server,
+no CI on this head yet). Any figure below would be invented and is therefore
+absent. Design intent only:
+
+- Attack-attempt pipeline: O(1) amortized per packet (one snapshot object, one
+  ring-buffer/queue offer on a fixed 256-slot `ArrayBlockingQueue`); overflow
+  drops the newest attempt and increments a counter — it cannot convict and
+  cannot allocate unboundedly.
+- `drainTick`: ≤ 64 resolutions/tick; O(nearby-entities) per resolution;
+  rejection sweep once per second, O(tracked players × ledger size 64).
+- Rotation delta: O(1) compare of consecutive samples already stored as the
+  existing 64-entry ring copy (unchanged allocation profile).
+- Break model: pure arithmetic, runs only on block break / dig packets.
+- A re-benchmark is REQUIRED on the first CI push of `0d9b94c` (or its
+  successor) before any performance claim may be made; honest expectation is
+  no measurable regression, but that expectation is not a result.

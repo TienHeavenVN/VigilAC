@@ -130,3 +130,30 @@ Detection effectiveness claims for Phase 6 checks are therefore **not made**; th
 are *implemented, unit-tested analyzers with documented signal logic*, and must be
 considered unproven against real hack clients until the §5 protocol is executed with a
 real client by the maintainer.
+
+---
+
+## 7. Phase 7 appendix (AUDIT-01…17 remediation, 2026-11-07)
+
+Status vocabulary unchanged. Every Phase 7 commit head
+(`a4c732d`, `1ca599b`, `0d9b94c`) is **compile-UNVERIFIED locally** — no JDK in
+this environment; CI (`Build and test` + 15 compat legs) is the gate. No Phase 7
+unit test has been executed.
+
+| Phase 7 change | Layer | Status |
+|---|---|---|
+| Reach attack-attempt pipeline (packet layer, bounded netty→main queue, attempt evidence only — never VL) | IMPLEMENTED | UNIT_TESTED_SOURCE (not executed; PE-runtime path NOT_VERIFIED in CI) |
+| Item-specific reach cap via `attack_range` component; unknown ⇒ configured 3.0 cap; **no invented component values** (1.21.11+ spear ranges targetable but unverified) | IMPLEMENTED | UNVERIFIED live |
+| Step bounded slippery-bounce state machine (no global exemption, no unbounded grace) | IMPLEMENTED | UNIT_TESTED_SOURCE (physics constants vanilla-known, 26.2-build-unverified) |
+| Jesus: riptide + vertical-dominant wind-burst streak resets (bounded, interruptible) | IMPLEMENTED | UNIT_TESTED_SOURCE |
+| AimAssist: snap = max single-sample angular burst; interval read pre-record | IMPLEMENTED | UNIT_TESTED_SOURCE |
+| AutoClicker: cap 25.0; rate path requires rhythm corroboration | IMPLEMENTED | UNIT_TESTED_SOURCE |
+| KillAura: gate = anchor ∧ (metronomic ∨ swingless); attempt rate scales VL only | IMPLEMENTED | UNIT_TESTED_SOURCE |
+| NoFall: per-factor correlation windows 2/1.5/1.5/2 s | IMPLEMENTED | UNIT_TESTED_SOURCE |
+| FastBreak: `BreakTimeModel` vanilla tool-tier model; unknown tier ⇒ timing verdict suppressed; creative/spectator skipped; NOT weakened | IMPLEMENTED | UNIT_TESTED_SOURCE (22 new tests, not executed) |
+| AUDIT-12 atomic warn flags; AUDIT-17 CV javadoc demoted to debug-only | IMPLEMENTED | — |
+
+**Detection claims remain: none.** No Phase 7 number in this repository is a
+measurement of detection rate, precision, recall, or load. The manual protocol
+above stays BLOCKED; the spear/attack-range items join it as explicit
+1.21.11-specific rows to run on a real client.

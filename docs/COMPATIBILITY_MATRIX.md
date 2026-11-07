@@ -74,3 +74,20 @@ matches there).
   world/chunk failure it assumes support (never convicts).
 * Multi-signal combat telemetry has no version-specific branches — packet-type
   reference equality only.
+
+---
+
+## 5. Phase 7 appendix (2026-11-07)
+
+| Item | Status |
+|---|---|
+| packetevents pinned to v2.14.0 (unchanged); **no new packet types used** | — |
+| Attack-attempt telemetry (ATTACK + INTERACT_ENTITY/ATTACK) feeds the reach attempt pipeline | IMPLEMENTED; runtime NOT_VERIFIED (no packetevents in CI harness) |
+| `PUNCH` (26.3+) swing successor handled defensively — unchanged from Phase 6 | IMPLEMENTED |
+| `attack_range` data-component read for weapons (registry-key based); missing/unreadable ⇒ source=`unknown`, cap=3.0 | UNVERIFIED on 1.21.11 and 26.x builds; fallback conservative by construction |
+| Reach behavior with 1.21.11+ spears | **UNVERIFIED / inert-by-default** (no component values invented; needs real-client item introspection) |
+| Wind Burst / Riptide states (`isRiptiding`, impulse vertical dominance >0.45 & >60 %) | constants vanilla-known; 26.2 behavior UNVERIFIED |
+| Copper-tier tools in `BreakTimeModel` | deliberately unmapped ⇒ correct-tool timing verdict suppressed (never guessed) |
+| 1.21.8 artifact (`paper-api` 1.21.x) | unchanged build surface; Phase 7 adds no new API dependency (Java-source only) |
+| 26.2 / 26.3 artifacts | unchanged build surface; behavior of the above is UNVERIFIED there |
+| 26.2 = UNVERIFIED end-to-end | explicit: this repository has not run 26.2 with Phase 7 code |
