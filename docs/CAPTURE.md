@@ -180,10 +180,13 @@ happily ingest labelled garbage — garbage the Stage 3 tooling cannot detect.
 
 - **No real corpus exists.** Nothing here is evidence that capture worked for real players at
   scale; the CI evidence is a synthetic offline bot on an ephemeral server.
-- The consent command is exercised through `bot.chat('/vigilac capture consent')` **and**
-  `execute as <bot> run vigilac capture consent` (rcon fallback) because mineflayer chat-command
-  delivery was not independently verified on this stack; both paths execute as the player and
-  exercise the same permission check.
+- The top-level `/vigilac` permission gates every subcommand (`vigilac.command`, default op).
+  The offline-mode test bot is therefore briefly `op`-ed over rcon for the consent smoke, grants
+  and revokes via its own chat (`/vigilac capture consent|revoke` — the same path a human op uses),
+  and is deopped afterwards. `execute as <bot> run vigilac capture consent` over rcon cannot grant
+  consent by design: the sender is the console and consent is personal — the command correctly
+  replies "Only players can grant/revoke capture consent." `vigilac capture status` over rcon is
+  used as a neutral observation point (counts only, never identifiers).
 - Capture verifies **plumbing** (consent, rows, schema, bounds, deletion), not the *validity* of any
   model or the *representativeness* of the sample. `AI_DATASET_EVALUATION.md` gates evaluation; real
   validation is `REAL_CLIENT_VALIDATION`, still BLOCKED.
