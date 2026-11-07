@@ -98,7 +98,7 @@ echo "== GC summary =="
 GCLINES=$(wc -l < gc.log 2>/dev/null || echo 0)
 GC_PAUSES=$(grep -c 'Pause' gc.log 2>/dev/null || echo 0)
 GC_TIME=$(awk '/Pause/ { for (i=1;i<=NF;i++) if ($i ~ /^[0-9.]+ms$/) { gsub("ms","",$i); s+=$i; n++ } } END { if (n>0) printf "%.1f", s; else print 0 }' gc.log 2>/dev/null)
-echo "::notice title=LoadGC::gc_log_lines=$GCLINES pauses=$GC_PAUSES approx_total_pause_ms=$GC_TIME stop_to_exit_ms=$STOP_MS"
+echo "::notice title=LoadGC::gc_log_lines=$GCLINES pauses=$GC_PAUSES approx_total_pause_ms=$GC_TIME"
 
 echo "== shutdown flush timing =="
 STOP_START=$(date +%s%N)
@@ -110,4 +110,4 @@ grep -q 'Disabling VigilAC' server.log || { echo '::error title=PluginNotDisable
 ls -la plugins/VigilAC/vigilac-violations.db || { echo '::error title=StorageMissing::db not created'; exit 1; }
 grep -Ei 'exception|severe' server.log | grep -i vigilac && { echo '::error title=PluginException::vigilac logged exceptions'; exit 1; }
 
-echo "::notice title=LoadResult::BOTS=$BOTS duration=${DURATION_SECONDS}s failed_bots=$FAILED_BOTS — done"
+echo "::notice title=LoadResult::BOTS=$BOTS duration=${DURATION_SECONDS}s failed_bots=$FAILED_BOTS stop_to_exit_ms=$STOP_MS — done"
