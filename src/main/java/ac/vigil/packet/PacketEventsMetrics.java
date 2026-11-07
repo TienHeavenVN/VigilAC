@@ -25,18 +25,26 @@ final class PacketEventsMetrics {
     private PacketEventsMetrics() {
     }
 
-    static MetricsListener register(JavaPlugin plugin, PlayerDataManager dataManager, String version) {
-        MetricsListener listener = new MetricsListener(dataManager, plugin.getLogger());
-        PacketEvents.getAPI()
+    /**
+     * Registers the metrics listener and returns the object packetevents actually
+     * registered (a {@code PacketListenerAbstract} wrapping our listener, since
+     * packetevents wraps {@link PacketListener} implementations via
+     * {@code PacketListener#asAbstract(PacketListenerPriority)}). The caller must
+     * keep this handle and pass it back to {@link #unregister(Object)}.
+     */
+    static Object register(JavaPlugin plugin, PlayerDataManager dataManager, String version) {
+        return PacketEvents.getAPI()
                 .getEventManager()
-                .registerListener(listener, PacketListenerPriority.NORMAL);
-        return listener;
+                .registerListener(new MetricsListener(dataManager, plugin.getLogger()), PacketListenerPriority.NORMAL);
     }
 
-    /** Unregisters the metrics listener (called on plugin disable). Never throws. */
-    static void unregister(MetricsListener listener) {
+    /** Unregisters the object packetevents registered (called on plugin disable). Never throws. */
+    static void unregister(Object registeredListener) {
+        if (registeredListener == null) {
+            return;
+        }
         try {
-            PacketEvents.getAPI().getEventManager().unregisterListener(listener);
+            PacketEvents.getAPI().getEventManager().unregisterListener((com.github.retrooper.packetevents.event.PacketListenerCommon) registeredListener);
         } catch (Throwable throwable) {
             // packetevents itself is already unloading (or gone): nothing to unregister from.
         }

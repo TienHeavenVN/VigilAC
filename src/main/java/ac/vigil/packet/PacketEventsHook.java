@@ -32,9 +32,9 @@ public final class PacketEventsHook {
         }
         try {
             String version = packetEvents.getDescription().getVersion();
-            PacketEventsMetrics.MetricsListener listener = PacketEventsMetrics.register(plugin, dataManager, version);
+            Object registered = PacketEventsMetrics.register(plugin, dataManager, version);
             plugin.getLogger().info("Hooked into packetevents " + version);
-            return new Handle(listener, "hooked packetevents " + version);
+            return new Handle(registered, "hooked packetevents " + version);
         } catch (Throwable throwable) {
             plugin.getLogger().warning("Failed to hook into packetevents; packet metrics disabled: " + throwable);
             return new Handle(null, "failed: " + throwable.getClass().getSimpleName());
@@ -46,11 +46,12 @@ public final class PacketEventsHook {
      * outcome. {@link #unregister()} is idempotent and safe to call at any time.
      */
     public static final class Handle {
-        private final PacketEventsMetrics.MetricsListener listener;
+        /** Object packetevents registered (a PacketListenerCommon), kept as Object so this class never hard-references packetevents. */
+        private final Object registeredListener;
         private final String status;
 
-        private Handle(PacketEventsMetrics.MetricsListener listener, String status) {
-            this.listener = listener;
+        private Handle(Object registeredListener, String status) {
+            this.registeredListener = registeredListener;
             this.status = status;
         }
 
@@ -60,16 +61,17 @@ public final class PacketEventsHook {
         }
 
         public boolean isAvailable() {
-            return listener != null;
+            return registeredListener != null;
         }
 
-        /** Unregister the packet listener; must be called on plugin disable. Safe to call twice. */
+        /** Unregister the packet listener packetevents holds; call on plugin disable. Safe to call twice. */
         public void unregister() {
-            PacketEventsMetrics.MetricsListener l = listener;
-            if (l == null) {
+            // Never even touch PacketEventsMetrics when nothing was registered
+            // (keeps the packetevents-absent server free of any PE class loading).
+            if (registeredListener == null) {
                 return;
             }
-            PacketEventsMetrics.unregister(l);
+            PacketEventsMetrics.unregister(registeredListener);
         }
     }
 }
