@@ -65,8 +65,10 @@ content, inventories, positions beyond what the 22 features encode, world seed, 
 Pseudonymization happens **before** rows reach the corpus directory (the capture build holds the
 HMAC key; the corpus does not). Rotation of the key makes old IDs unlinkable — plan ≤ 90 days retention.
 
-The capture build is out of scope for this repository; any implementation must satisfy the same
-validation rules (i.e. its output must pass `validate.py` with zero rejects on a sampled audit).
+The capture build lives in this repository: `docs/CAPTURE.md` (disabled by default, owner
+declaration + explicit player opt-in required — `/vigilac capture consent`). Any capture's output
+must pass `validate.py` with zero rejects on a sampled audit, exactly as if it had been produced
+externally.
 
 ## 4. Versioning & reproducibility
 

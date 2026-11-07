@@ -13,6 +13,7 @@ Status as of 2026-11-08 (branch `arena/a7154a72-vigilac`; dataset tooling commit
 | 5 | Evidence correlation | **IMPLEMENTED + TESTED + CI_VERIFIED** | `AiEvidenceCorrelator` (NONE/LOW/MEDIUM/HIGH; ML-only ⇒ ≤ LOW; FP downgrade); `AiEvidenceCorrelatorTest`; `ai-shadow` self-corroboration excluded |
 | 6 | Admin assistant | **IMPLEMENTED + TESTED + CI_VERIFIED (offline templates; LLM optional/disabled)** | `assistant/`; ships NoopLlmProvider only; `AdminAssistantTest`; reports carry limitations + disclaimer |
 | 7 | Performance + real-client validation | **BLOCKED** | Requires real production server + consenting client builds; `REAL_CLIENT_VALIDATION` stays BLOCKED |
+| 8 | Consent-based gameplay telemetry capture | **IMPLEMENTED + TESTED; CI integration pending verification** (task-numbered "Stage 4" — requested as the stage after Stage 3 dataset engineering) | `src/main/java/ac/vigil/capture/`; disabled by default; owner-declared scenario/label enforced; per-player opt-in via `/vigilac capture consent`; consent store holds opaque HMAC tokens only; bounded buffer/writer, disk quota halt, retention purge, delete-all; rows are the §1 corpus format. `docs/CAPTURE.md`. No corpus exists yet; consent capture is plumbing, not evidence about detection quality. |
 
 ## Order of work actually followed
 

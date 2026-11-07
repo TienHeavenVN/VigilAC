@@ -65,6 +65,7 @@ Base permission: `vigilac.command` (default: op). Every subcommand checks its ow
 | `/vigilac reload` | reload `config.yml` | `vigilac.reload` |
 | `/vigilac exempt <player> [check\|*]` | toggle exemptions | `vigilac.exempt` |
 | `/vigilac monitor [player]` | continuous monitoring state + per-check detection status | `vigilac.monitor` |
+| `/vigilac capture <consent\|revoke\|status\|purge-old\|delete-all>` | opt in/out of consent-based research telemetry; admin corpus management (disabled by default) | `vigilac.capture` / `vigilac.capture.admin` |
 
 Full reference: [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 

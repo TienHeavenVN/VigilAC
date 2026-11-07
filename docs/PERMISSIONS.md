@@ -1,6 +1,6 @@
 # VigilAC permissions
 
-All permissions default to **op**.
+All permissions default to **op**, except where noted otherwise.
 
 | Permission | Description |
 |---|---|
@@ -14,6 +14,8 @@ All permissions default to **op**.
 | `vigilac.exempt` | **Bypass all checks.** Also grants the exemption toggle subcommand. Grant sparingly (staff, known-good builders). |
 | `vigilac.monitor` | View continuous monitoring state and per-check detection status for a player (`/vigilac monitor <player>`). |
 | `vigilac.ai` | View AI-assist reports, assistant narratives and module status (`/vigilac ai ...`). Advisory only; never triggers action. |
+| `vigilac.capture` | Consent-based research telemetry: `/vigilac capture consent\|revoke\|status` (default: **true** — every player may opt in/out and see status). |
+| `vigilac.capture.admin` | Purge old capture day-files or wipe the corpus + consent store (`/vigilac capture purge-old\|delete-all confirm`). Default: op. |
 
 Notes:
 
