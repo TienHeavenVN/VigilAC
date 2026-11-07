@@ -155,7 +155,7 @@ public final class OnnxRuntimeAnomalyModel implements AnomalyModel {
         }
         try {
             Class<?> onnxTensor = Class.forName(ONNX_TENSOR_CLASS);
-            Method create = onnxTensor.getMethod("createTensor", Object.class, float[].class, long[].class);
+            Method create = findCreateTensorMethod(onnxTensor, environment);
             Object tensor = create.invoke(null, environment, input, new long[] {1L, input.length});
             Map<String, Object> feeds = Map.of("input", tensor);
             Object result = session.getClass().getMethod("run", Map.class).invoke(session, feeds);
@@ -192,6 +192,28 @@ public final class OnnxRuntimeAnomalyModel implements AnomalyModel {
         } catch (ReflectiveOperationException | RuntimeException e) {
             throw new IllegalStateException("ONNX inference failed: " + abbreviate(e.toString()), e);
         }
+    }
+
+    /**
+     * Probe for the static {@code createTensor(env, float[], long[])} overload. onnxruntime
+     * has changed the first parameter's declared type between releases (Object vs
+     * OrtEnvironment), so scan the methods instead of trusting one exact signature.
+     */
+    private static Method findCreateTensorMethod(Class<?> onnxTensor, Object environment) throws NoSuchMethodException {
+        for (Method method : onnxTensor.getMethods()) {
+            if (!"createTensor".equals(method.getName())) {
+                continue;
+            }
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 3) {
+                continue;
+            }
+            if (params[1] == float[].class && params[2] == long[].class
+                    && params[0].isAssignableFrom(environment.getClass())) {
+                return method;
+            }
+        }
+        throw new NoSuchMethodException("ai.onnxruntime.OnnxTensor.createTensor(env, float[], long[])");
     }
 
     /** Releases the native session/environment when present. Never throws. */

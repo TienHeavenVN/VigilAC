@@ -30,12 +30,22 @@ public final class ModelRegistry {
         private final ModelManifest manifest; // null only when the manifest itself could not be parsed
         private final AnomalyModel model;     // null when unavailable
         private final String status;
+        private final String modelId;         // peeked id for rollback-skipped models; file name for unparseable ones
 
         private LoadedModel(String manifestFile, ModelManifest manifest, AnomalyModel model, String status) {
             this.manifestFile = manifestFile;
             this.manifest = manifest;
             this.model = model;
             this.status = status;
+            this.modelId = manifest != null ? manifest.modelId() : manifestFile;
+        }
+
+        private LoadedModel(String manifestFile, String modelId, String status) {
+            this.manifestFile = manifestFile;
+            this.manifest = null;
+            this.model = null;
+            this.status = status;
+            this.modelId = modelId != null ? modelId : manifestFile;
         }
 
         public String manifestFile() { return manifestFile; }
@@ -44,7 +54,7 @@ public final class ModelRegistry {
         public boolean loaded() { return model != null && model.available(); }
         /** One-line honest status, e.g. "loaded" or "unavailable: checksum mismatch". */
         public String status() { return status; }
-        public String modelId() { return manifest == null ? manifestFile : manifest.modelId(); }
+        public String modelId() { return modelId; }
     }
 
     /**
@@ -84,7 +94,7 @@ public final class ModelRegistry {
                 // on peek fall through to loadOne to surface the real reason.
                 String peeked = peekModelId(manifestPath);
                 if (peeked != null && !peeked.equals(filter)) {
-                    out.add(new LoadedModel(manifestPath.getFileName().toString(), null, null,
+                    out.add(new LoadedModel(manifestPath.getFileName().toString(), peeked,
                             "skipped (ai.active-model-id=" + filter + "; model id " + peeked + ")"));
                     continue;
                 }

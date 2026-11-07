@@ -98,11 +98,13 @@ class AiServicesLifecycleTest {
         PlayerData data = players.load(UUID.randomUUID());
         data.combatTracker().recordAttack(now.get());
         services.scanTick();
-        for (int i = 0; i < 100 && services.status().submitted() == 0; i++) {
+        long submittedBeforeStop = services.status().submitted();
+        for (int i = 0; i < 100 && submittedBeforeStop == 0; i++) {
             Thread.sleep(10L);
+            submittedBeforeStop = services.status().submitted();
         }
+        assertTrue(submittedBeforeStop >= 1, "scanTick must enqueue the tracked player synchronously");
         services.stop();
-        assertTrue(services.status().submitted() >= 1, "scanTick must enqueue the tracked player synchronously");
         assertFalse(services.isStarted());
         services.stop(); // idempotent
     }
