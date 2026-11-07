@@ -144,6 +144,8 @@ public final class DetectionContext {
         private boolean levitation, slowFalling;
         private boolean inWeb;
         private boolean onSlowBlock;
+        private boolean onWaterSurface;
+        private boolean frostWalker;
 
         public Builder player(java.util.UUID player) { this.player = player; return this; }
         public Builder worldName(String worldName) { this.worldName = worldName == null ? "" : worldName; return this; }
