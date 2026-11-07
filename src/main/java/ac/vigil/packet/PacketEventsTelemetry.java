@@ -5,7 +5,6 @@ import java.util.logging.Logger;
 import org.bukkit.plugin.java.JavaPlugin;
 import ac.vigil.data.PlayerData;
 import ac.vigil.data.PlayerDataManager;
-import ac.vigil.monitor.EvidenceType;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListener;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
@@ -33,8 +32,10 @@ import com.github.retrooper.packetevents.util.Vector3i;
  * <ul>
  *   <li>packetevents fires these callbacks on the netty event loop. The
  *       listener performs O(1) synchronized tracker updates and one monitor
- *       evidence call — no Bukkit API, no world access, no I/O, no allocation
- *       beyond small (immutable) value construction.</li>
+ *       evidence call — no Bukkit API, no world access, no I/O. Only
+ *       short-lived packetevents wrapper objects are allocated per packet
+ *       (flying/dig/attack); trackers themselves store primitives in fixed
+ *       rings.</li>
  *   <li>All per-player structures are fixed-capacity; nothing grows without
  *       bound. Evidence entries flow into the existing 256-entry monitor ring.</li>
  * </ul>
