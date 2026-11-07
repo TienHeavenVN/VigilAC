@@ -43,7 +43,7 @@ jobs:
           set +e
           ./gradlew compileJava --no-daemon > compile.log 2>&1
           code=$?
-          tail -n 30 compile.log
+          tr '\r' '\n' < compile.log | tail -n 40
           if [ $code -ne 0 ]; then
             python3 - <<'PYEOF'
           import html
@@ -147,9 +147,9 @@ jobs:
           set +e
           ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.1.2.build.74-stable -PjavaRelease=25 -PartifactName=VigilAC-26x > compile.log 2>&1
           code=$?
-          tail -n 30 compile.log
+          tr '\r' '\n' < compile.log | tail -n 40
           if [ $code -ne 0 ]; then
-            tail -30 compile.log | while IFS= read -r line; do
+            tr '\r' '\n' < compile.log | tail -40 | while IFS= read -r line; do
               [ -n "$line" ] && printf '::error title=Compile26tail::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-400)"
             done
             exit $code
@@ -242,7 +242,7 @@ jobs:
           set +e
           ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} > compile.log 2>&1
           code=$?
-          tail -n 25 compile.log
+          tr '\r' '\n' < compile.log | tail -n 40
           if [ $code -ne 0 ]; then
             grep -E 'error:|Could not|What went wrong|Execution failed|not resolvable|FAILED' compile.log | head -12 | while IFS= read -r line; do
               printf '::error title=Compile::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-500)"
@@ -598,7 +598,7 @@ jobs:
     # workflow_dispatch when permitted; else any push whose head commit message contains [load] (CI token cannot create dispatch events)
     name: Load test (${{ inputs.load_bots || '10' }} bots)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message || '', '[load]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message || '', '[load')
     steps:
       - name: Checkout
         uses: actions/checkout@v4

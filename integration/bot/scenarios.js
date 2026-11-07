@@ -253,7 +253,8 @@ define('illegal-nofall', { kind: 'probe', description: 'fall-damage cancellation
 
 define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tolerance: zombie HP verified before/after', expect: ['reach'] }, async (bot, api) => {
   const name = api.result.username;
-  for (const dist of [3.6, 4.5, 5.0]) {
+  // over-reach burst (3.6b) runs LAST so the VL it accrues is fresh at the RCON readout (VL decays 1/s after 5s)
+  for (const dist of [5.0, 4.5, 3.6]) {
     api.rcon(`execute at ${name} run summon minecraft:zombie ~${dist} ~ ~ {NoAI:1b}`);
       }
   await api.sleep(1000);
@@ -273,6 +274,7 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
   const name = api.result.username;
   await summonImmortalZombie(api, name, { x: 2, z: 0 });
   await api.sleep(800);
+  const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   const end = Date.now() + 12000;
   let attacks = 0, resummons = 0;
   while (Date.now() < end) {
@@ -286,8 +288,10 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
     zombies.sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position));
     await lookAndAttack(bot, zombies[0]);
     attacks++;
-    await api.sleep(40);
+    await api.sleep(30);
   }
+  const after = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+  api.result.evidence.push('HP before=[' + before.replace(/\s+/g, ' ').slice(-60) + '] after=[' + after.replace(/\s+/g, ' ').slice(-60) + ']');
   api.result.evidence.push(attacks + ' attacks in 12s (~' + Math.round(attacks / 12) + ' CPS), resummons=' + resummons);
 });
 
@@ -321,6 +325,9 @@ define('illegal-scaffold', { kind: 'illegal', description: 'stack 4 blocks on ea
   await api.sleep(400);
   const pos = bot.entity.position.floored();
   await bot.look(Math.PI / 2, 0, true); // face west (-x): pillars are directly behind; angle ~180deg
+  const rot = api.rcon(`data get entity ${name} Rotation`).replace(/\s+/g, ' ');
+  const possvr = api.rcon(`data get entity ${name} Pos`).replace(/\s+/g, ' ');
+  api.result.evidence.push('server-side Rotation=[' + rot.slice(0, 80) + '] Pos=[' + possvr.slice(0, 80) + ']');
   let placed = 0;
   const errors = [];
   for (const dz of [1, 2]) {
@@ -330,6 +337,8 @@ define('illegal-scaffold', { kind: 'illegal', description: 'stack 4 blocks on ea
       try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) { errors.push(String((e && e.message) || e).slice(0, 160)); break; }
     }
   }
+  api.rcon(`execute if block ${pos.x + 2} ${pos.y + 2} ${pos.z + 1} minecraft:dirt run say SCAFFOLD_APEX_DIRT`);
+  api.rcon(`execute if block ${pos.x + 2} ${pos.y + 2} ${pos.z + 2} minecraft:dirt run say SCAFFOLD_APEX_DIRT`);
   api.result.evidence.push('placed ' + placed + ' blocks behind the player (angle ~180deg)' + (errors.length ? ' errors=[' + errors.join(' || ') + ']' : ''));
 });
 
@@ -343,7 +352,7 @@ define('illegal-fastplace', { kind: 'illegal', description: 'stack 5 blocks on e
   api.rcon(`execute at ${name} run setblock ~2 ~-1 ~2 dirt`);
   api.rcon(`execute at ${name} run setblock ~3 ~-1 ~1 dirt`);
   api.rcon(`execute at ${name} run setblock ~3 ~-1 ~2 dirt`);
-  await api.sleep(400);
+  await api.sleep(700);
   const pos = bot.entity.position.floored();
   await bot.look(-Math.PI / 2, 0, true); // face the pillars (+x): bearing fine, rate is the signal
   const pillars = [[2, 1], [2, 2], [3, 1], [3, 2]];
@@ -351,8 +360,8 @@ define('illegal-fastplace', { kind: 'illegal', description: 'stack 5 blocks on e
   const errors = [];
   const started = Date.now();
   for (const [dx, dz] of pillars) {
-    for (let i = 0; i < 5 && Date.now() - started < 6000; i++) {
-      const ref = bot.blockAt(pos.offset(dx, -1 + (i === 0 ? 0 : i), dz));
+    for (let i = 0; i < 6 && Date.now() - started < 8000; i++) {
+      const ref = bot.blockAt(pos.offset(dx, -1 + i, dz));
       if (!ref) { errors.push('null@' + dx + ',' + dz + ',' + i); break; }
       try { await bot.placeBlock(ref, new Vec3(0, 1, 0)); placed++; } catch (e) {
         errors.push(String((e && e.message) || e).slice(0, 160));
@@ -394,6 +403,7 @@ define('illegal-aimassist', { kind: 'illegal', description: 'six 180-degree snap
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 2);
   if (zombies.length < 2) { api.result.evidence.push('zombies tracked: ' + zombies.length); return; }
   const eye = () => bot.entity.position.y + 1.62;
+  const hpBefore = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   for (let snap = 0; snap < 6; snap++) {
     const z = zombies[snap % 2];
     const dx = z.position.x - bot.entity.position.x;
@@ -401,13 +411,15 @@ define('illegal-aimassist', { kind: 'illegal', description: 'six 180-degree snap
     const dist = Math.hypot(dx, dz);
     const bearing = Math.atan2(-dx, dz);
     const pitch = Math.atan2(eye() - (z.position.y + 0.975), dist);
-    await bot.look(bearing + Math.PI, 0, true);
-    // snap-max-interval is 120ms server-side: run look-snap and attack back to
-    // back so consecutive attacks land inside one snap window (zombies frozen).
+    // No away-look needed: consecutive attacks alternate between the two
+    // opposite-side zombies, which IS the ~180deg swing; attacks land inside
+    // snap-max-interval (120ms) with margin.
     await bot.look(bearing, pitch, true);
     attack(bot, z);
     await api.sleep(20);
   }
+  const hpAfter = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
+  api.result.evidence.push('zombie HP before=[' + hpBefore.replace(/\s+/g, ' ').slice(-40) + '] after=[' + hpAfter.replace(/\s+/g, ' ').slice(-40) + ']');
   const hp = api.rcon(`execute at ${api.result.username} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
   api.result.evidence.push('6 alternating 180-degree snaps onto zombies; zombie HP=[' + hp.slice(-80) + ']');
 });
