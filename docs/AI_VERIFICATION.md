@@ -19,7 +19,7 @@ Honesty contract: this document contains only what was actually measured. Where 
 | AI report rendering (limitations footer mandatory) | IMPLEMENTED, TESTED | `AiReportBuilderTest` |
 | `/vigilac ai` command + `vigilac.ai` permission | IMPLEMENTED, NOT RUNTIME-TESTED | Requires a live server; no server was available in this environment |
 | ONNX adapter load with runtime absent | IMPLEMENTED, TESTED (absence path) | `OnnxRuntimeAnomalyModelTest` |
-| ONNX end-to-end inference (real onnxruntime, synthetic fixture model) | IMPLEMENTED, TESTED | `OnnxRuntimeEndToEndTest` — Java score == Python onnxruntime reference within 1e-4; fixture says nothing about real cheats |
+| ONNX end-to-end inference (real onnxruntime, synthetic fixture model) | IMPLEMENTED, TESTED, CI_VERIFIED | `OnnxRuntimeEndToEndTest` — Java score == Python onnxruntime reference within 1e-4; fixture says nothing about real cheats. First execution surfaced and fixed two adapter API mismatches (Buffer-based tensor factory; `Result` is an Iterable, not a Map) |
 | XGBoost → ONNX export + onnxruntime parity (synthetic) | EXECUTED, NOT COMMITTED | max \|Δ\| = 2.98e-08 on a 5-tree/depth-2 toy model; empty test split honestly reported |
 | Dataset tooling (ingest/validate/split/evaluate; gates) | IMPLEMENTED, TESTED | `tools/dataset/` + 24 stdlib tests, wired into CI |
 | Model rollback (`ai.active-model-id`) | IMPLEMENTED, TESTED | `ModelRegistryTest`, `AiServicesLifecycleTest`; artifact of skipped models never read |
@@ -48,8 +48,21 @@ Honesty contract: this document contains only what was actually measured. Where 
 
 ## CI runs
 
-- `ca9607a` — rollback/registry/ONNX-contract commit; CI run recorded below once green (this document is updated in a follow-up docs commit with the exact run IDs; no greenness is claimed before that).
-- `a75294f` — dataset tooling commit; CI run recorded below once green.
+- `ca9607a`, `a75294f`, `b6025d4` — stage 3 commits; CI run [42394435172](https://github.com/TienHeavenVN/VigilAC/actions/runs/42394435172): **failure**.
+  Root causes: (1) my lifecycle test asserted `submitted()` after `stop()` nulls the pool (assertion bug — expected 0 to be ≥ 1, by construction impossible);
+  (2) the ONNX adapter probed a non-existent `createTensor(env, float[], long[])` overload;
+  (3) rollback-skipped models reported their manifest *file name* instead of the peeked modelId (test `orElseThrow` empty ⇒ NoSuchElementException).
+  Fixed in `2b61e9d` (1+3) and `e007125` (2, against the v1.31.1 onnxruntime sources: Buffer-based factories, `Result` is an Iterable).
+- `2b61e9d` — CI run [42394650646](https://github.com/TienHeavenVN/VigilAC/actions/runs/42394650646): **failure** —
+  the remaining single failure was the same createTensor probe (2), fixed in `e007125`.
+- `e007125` — CI run [42395430862](https://github.com/TienHeavenVN/VigilAC/actions/runs/42395430862): **success**.
+  All 22 jobs green (build; 16 compatibility matrix cells incl. 1.21–1.21.11, 26.1.2–26.3;
+  authoritative version inventory; 26x artifact build; runtime smoke tests on Paper 1.21.8/26.1.2/26.2/26.3;
+  live bot harness). Primary job annotation: `tests=380 skipped=0 failures=0 errors=0`.
+  Note: load-test job remained skipped (gated); no runtime smoke of the AI command on a live server was performed.
+- Earlier AI-stage runs (for context): `3ad0bae` — [42390581454](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390581454) success (366 tests);
+  `e2eb7ed` — [42390460389](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390460389) failure (breakInterval sentinel clip, fixed by `3ad0bae`);
+  `48a3664`/`77cef4b` — [42391382642](https://github.com/TienHeavenVN/VigilAC/actions/runs/42391382642)/[42392219487](https://github.com/TienHeavenVN/VigilAC/actions/runs/42392219487) success (docs).
 
 - `3ad0bae` — CI run [42390581454](https://github.com/TienHeavenVN/VigilAC/actions/runs/42390581454): **success**.
   All 19 jobs green (build, `Build and test` on the primary toolchain, 16 compatibility matrix
