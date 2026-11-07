@@ -67,3 +67,54 @@ No legit scenario ever accrued timer, fly, no-fall or reach VL. Timer fires only
 
 - The `sprint=false` server flag mystery (mineflayer sprint never registers) is unresolved; it only affects walk-vs-sprint cap selection on the legit baseline. If resolved, trace VL would halve; alerts are zero either way.
 - Latency-leg behavior at extreme jitter (>300 ms) is not characterized beyond the 120±30 ms pass.
+
+---
+
+# Phase 4 update (2026-11-07)
+
+## FP-6 (root-caused): combat checks reading as 0 VL — the damage-event funnel, not VL decay
+
+**Symptom.** In the live legs, the auto-clicker/kill-aura/aim-assist scenarios showed debug
+evidence in the console digest yet `/vigilac check <bot>` read **0.0** at read time.
+
+**Investigation.**
+
+1. VL decay was the wrong suspect and is now disproven by construction: decay cannot begin until
+   `decay-delay-seconds` (5 s) after the LAST violation — i.e., after the scenario has ended, while
+   the harness reads VL ~1.5 s after the last attack. Decay physically cannot have erased anything
+   in that window. `ViolationDecayTest` pins the whole lifecycle with a controlled clock.
+2. The real funnel is `AttackListener`, which keys off `EntityDamageByEntityEvent` — attacks only
+   count if they **deal damage**. A 20 HP NoAI zombie dies in 2–4 swings; every subsequent swing in
+   the 25-CPS barrage lands on a corpse and emits nothing. The auto-clicker's rolling 20-sample
+   interval window never reaches `min-samples = 10`, the rate gate and the robotic-streak gate can
+   never engage, and VL converges to 0 regardless of click rate. Aim-assist likewise starves
+   (`min-snap-streak = 4`, whiff-starved stream).
+   → This is a **detection-availability property** of damage-keyed melee accounting on dying
+   targets, not a false positive and not a bug in VL accounting; but it made the live scenarios
+   unable to evidence the checks.
+
+**Fix (harness, not checks).** The live scenarios for `auto-clicker`, `kill-aura` and `aim-assist`
+now summon **immortal** zombies (`Health:10000f` + `Attributes:[{id:"minecraft:max_health",base:10000}]`)
+so every attack deals damage for the full window. No check logic, threshold, gate or VL weight was
+changed. Results of the rerun are pinned in LIVE_TEST_RESULTS.md.
+
+**Unit-test pin.** `AutoClickerCheckTest#fewerThanMinSamplesNeverFlags` documents the gate;
+`ViolationDecayTest#transientEvidenceIsJudgedAtEventTimeNotAtReadTime` proves event-time evaluation.
+
+## FP-1 status — sprint-jump / server-side sprint flag (open, narrowed)
+
+- mineflayer sends `entity_action start_sprinting` on `setControlState('sprint', true)`
+  (verified in mineflayer 4.39.0 source: `plugins/physics.js`).
+- Yet the server has reported `sprint=false` for these bots — the reason is under investigation
+  (1.21.6+ protocol rework routes player input via a `player_input` packet; whether the server
+  honors `entity_action start_sprinting` on 1.21.8 is the open question).
+- The harness now probes the flag authoritatively per run
+  (`data get entity <bot> Sprinting`, logged as raw evidence in the scenario output).
+- Either way the plugin's behavior is unchanged and correct: VL accrues only below alert-vl and
+  never fires an alert (alert-only mode; no action). No threshold has been raised.
+
+## FP hardening carried over (unchanged from Phase 3)
+
+- `SpeedCheck` dt<45 ms backlog-burst guard (FP-2 fix), pinned by
+  `SpeedCheckTest#backlogBurstDoesNotFabricateSpeed` / `sustainedSprintCheatStillFlags`.
+- Alert-only default, no auto-kicks, no check weakened for convenience.
