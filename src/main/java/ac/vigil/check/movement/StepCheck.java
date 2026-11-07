@@ -22,6 +22,9 @@ import ac.vigil.detection.DetectionContext;
  *       One impossibility can race with piston displacement history or block
  *       placement under the feet, so evidence requires
  *       {@code minStreak} (default 2) consecutive impossibilities.</li>
+ *   <li>The comparison uses a 1e-6 epsilon above the configured bound so a
+ *       delta reconstructed as (from + d) - from never flips across the
+ *       boundary on floating-point dust.</li>
  *   <li>Only observations that disqualify (legal or ambiguous rise) reset the
  *       streak — a single legal tick between two hacked steps therefore clears
  *       the streak and avoids stacking evidence across unrelated events.</li>
@@ -54,6 +57,8 @@ import ac.vigil.detection.DetectionContext;
 public final class StepCheck implements Check<DetectionContext> {
 
     public static final double MIN_TPS = 10.0D;
+    /** Rounding margin so a delta built as (from + d) - from never flips the comparison. */
+    public static final double EPSILON = 1.0E-6D;
 
     private final double stepMaxLegal;
     private final int minStreak;
@@ -87,7 +92,7 @@ public final class StepCheck implements Check<DetectionContext> {
             return;
         }
 
-        if (ctx.getDeltaY() <= stepMaxLegal) {
+        if (ctx.getDeltaY() <= stepMaxLegal + EPSILON) {
             tracker.resetStepImpossibility();
             return;
         }
