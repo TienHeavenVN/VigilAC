@@ -53,7 +53,7 @@ No Phase 7 document may claim any of the above.
 | Copper-tier tools (introduced 1.21.x, supported since 1.21.5 era) | **UNMAPPED deliberately** | `BreakTimeModel.ToolTier.forMaterial` returns `null` → timing verdict suppressed for correct-tool digs (never flagged). Wrong-tool digs still decidable |
 | Enchantment max levels (Haste IV / Mining Fatigue IV supported; Sap without tool) | **UNVERIFIED against a live 26.2 client** | Caps applied vanilla-idiomatically from known behavior (≥1.16); real mismatches only change how far off-cycle timing evidence may land, never direction (suppression remains safe) |
 | Aqua Affinity / 13-tick Haste guard | Not modelled | Conservative by omission: water + no Aqua ⇒ ÷5 applies and digs still accrue *credit* the usual way; vanilla Aqua Affinity removes only the water penalty on recognized tools |
-| `canHarvest` semantics (correct family ⇒ fast divisor, else slow divisor) | Modelled as `correctTool ? 1.5 : 5.0` (= vanilla 30/100 × 20 ticks) | Approximation of vanilla's real canHarvest (item vs block hardness table); wrong-family-but-correct-stone-style exceptions (e.g. axe on logs) behave correctly because family match == effective tool in vanilla for every vanilla pair |
+| `canHarvest` semantics | **SUPERSEDED (independent-review remediation)** | `BreakTimeModel` no longer derives a single `correctTool` flag: it models `toolEffective` (family effectiveness ⇒ speed) and `canHarvest` (drop requirement viability ⇒ 30/100-tick divisor) as separate facts with a per-block pickaxe-tier requirement table. See `PHASE_7_INDEPENDENT_REVIEW.md`, Finding 1 |
 | packetevents ATTACK/INTERACT_ENTITY/PUNCH packets on 26.x | API pinned to v2.14.0 (unchanged from Phase 6); runtime **NOT_VERIFIED** | Same degradation story as Phase 6: telemetry inert without the plugin; reach attempt pipeline drains on the main thread |
 | Mace Wind Burst / Riptide triple-velocity arcs in 26.2 | Physics constants from vanilla source knowledge, not re-derived on 26.2 build | Windows (3 s grace, vertical-dominant dy>0.45 & >60% axis share) are bounded and revert under no circumstance-never-permanent; misfires can only extend grace, never hide VL evidence (grace only suppresses fall/lift checks) |
 
@@ -68,12 +68,17 @@ No Phase 7 document may claim any of the above.
 
 ## 5. Branch & push status
 
-- Work is confined to `arena/a7154a72-vigilac` (HEAD: `0d9b94c`).
-- **No push has been made for Phase 7** and none will be without explicit
-  user authorization. `git ls-remote origin arena/a7154a72-vigilac` returns
-  empty — the branch exists locally only. No PR is open for Phase 7.
-- The Arena session is bound to this branch; `main` is untouched. History has
-  **not** been rewritten; no force-push, no `reset --hard`, no dropped commits.
+- Work is confined to `arena/a7154a72-vigilac`. Phase 7 commits were pushed to
+  this branch under explicit user authorization (CI run verified green at
+  `2afe073`; see below). A subsequent independent-review remediation commit was
+  pushed the same way; its verification is CI-gated (no local JDK — see the
+  PHASE_7_INDEPENDENT_REVIEW.md header).
+- No PR is open for Phase 7; `main` is untouched. History has **not** been
+  rewritten; no force-push, no `reset --hard`, no dropped commits.
+- The Arena session is bound to this branch. Phase 7 is **not** complete: the
+  independent review produced two confirmed findings; both are implemented in
+  the remediation commit documented in `docs/PHASE_7_INDEPENDENT_REVIEW.md`.
+  REAL_CLIENT_VALIDATION remains BLOCKED (§2).
 
 ## 6. Severity assessment vs Phase 7 acceptance criteria
 
@@ -82,13 +87,13 @@ No Phase 7 document may claim any of the above.
 | Reach: packet-level attempt pipeline distinct from damage; thread-safe hand-off | IMPLEMENTED on this branch; CI + real-client verification pending |
 | Reach: item-specific range, unknown ⇒ conservative | IMPLEMENTED (attack_range component read; unknown ⇒ 3.0 + tolerance; no invented values) |
 | Reach: not convicted on single hit; EMA + streak gates | IMPLEMENTED (carried from Phase 6, range source added to evidence) |
-| Reach: regression tests | IMPLEMENTED (ReachCheckTest additions: vanilla-3.0 cap, jitter, attempt evidence, component-preferred cap) |
+| Reach: regression tests | IMPLEMENTED (ReachCheckTest additions: vanilla-3.0 cap, jitter, attempt evidence, component-preferred cap; PLUS review remediation: deferred-resolution pairing tests in ReachEvidenceLedgerTest / AttackAttemptDispatcherTest — see `PHASE_7_INDEPENDENT_REVIEW.md`, Finding 2) |
 | Step: bounded bounce state machine, not a global exemption | IMPLEMENTED (commit `1ca599b`) |
 | Jesus: riptide/wind-burst bounded evidence-based exemption | IMPLEMENTED (resets streak; riptide isRiptiding + vertical-dominant impulse ≤3 s) |
 | AimAssist: angular-step max per sample; Summing rejected | IMPLEMENTED (RotationTracker.maxDeltaInWindow + test) |
 | AutoClicker: rate alone never convicts | IMPLEMENTED (rate ⇒ requires regularity corroboration; cap 25) |
 | KillAura: anchor + attempt-rate alone never convicts | IMPLEMENTED (gate = anchor ∧ (metronomic ∨ swingless); attempt rate only scales VL) |
-| FastBreak: full vanilla tool-tier model; NOT weakened; regression tests | IMPLEMENTED (BreakTimeModel + 14 formula-contract tests + 7 tier regression tests; wrong-tool/unbreakable/instant paths untouched) |
+| FastBreak: full vanilla tool-tier model; NOT weakened; regression tests | IMPLEMENTED, then corrected by independent-review remediation (wrong-tool divisor/harvestability split; BreakTimeModel two-axis rewrite + BreakTimeModelHarvestTest; see `PHASE_7_INDEPENDENT_REVIEW.md`, Finding 1) |
 | NoFall: honest framing; correlation advisory only; per-factor windows | IMPLEMENTED (2/1.5/1.5/2 s) |
 | ML: advisory only; no invented metrics; human-CV prior deleted (AUDIT-17) | IMPLEMENTED |
 | Docs: strict status labels, blockers list, honest ML scope | IMPLEMENTED (this file + PHASE_7_IMPLEMENTATION.md + matrix/benchmark updates) |

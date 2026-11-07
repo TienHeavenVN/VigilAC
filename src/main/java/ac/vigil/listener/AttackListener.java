@@ -106,7 +106,7 @@ public final class AttackListener implements Listener {
 
         // Pair with the packet-layer attempt, if any: the damage event confirms
         // the swing connected — attempts that never pair are classified rejected.
-        data.reachEvidenceLedger().markDamaged(target.getEntityId(), nowMillis, 400L);
+        data.reachEvidenceLedger().markDamaged(target.getEntityId(), nowMillis, ac.vigil.data.tracking.ReachEvidenceLedger.PAIR_WINDOW_MILLIS);
 
         // Combat statistics are recorded exactly once per attack here, not per
         // check, so CPS/interval windows are never double counted.

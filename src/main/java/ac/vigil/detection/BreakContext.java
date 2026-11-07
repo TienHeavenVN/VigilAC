@@ -2,10 +2,12 @@ package ac.vigil.detection;
 
 /**
  * Immutable snapshot of a completed block break, built from a main-thread
- * {@code BlockBreakEvent}. Carries the tool facts the server actually used
- * (tool family correctness for the block, efficiency enchant level on the
- * held item, haste potion amplifier) so checks can compute a physically
- * impossible break-time budget without guessing.
+ * {@code BlockBreakEvent}. Carries the mining facts vanilla actually uses
+ * (tool-family effectiveness, drop-harvestability, block-mechanics
+ * recognition, efficiency level on the held item, haste amplifier) so checks
+ * can compute a physically impossible break-time budget without guessing.
+ * Unknown block mechanics or an effective-but-unmapped tool produce NaN
+ * budgets — "cannot judge", never a guess.
  */
 public final class BreakContext {
 
@@ -14,8 +16,12 @@ public final class BreakContext {
     private final int blockX, blockY, blockZ;
     /** Block hardness from the server (0 = instant, negative = unbreakable). */
     private final float hardness;
-    /** True when the held tool is the correct family for this block (or the block needs none). */
-    private final boolean correctTool;
+    /** True when the held tool's family is effective for this block (base dig speed and Efficiency apply). */
+    private final boolean toolEffective;
+    /** True when the held tool satisfies the block's drop requirement (30-tick vs 100-tick divisor). */
+    private final boolean canHarvest;
+    /** False when the block is not recognized by the vanilla mining model (modded mechanics): no timing verdict. */
+    private final boolean miningModelKnown;
     /** Efficiency enchantment level on the held item, 0 if none. */
     private final int efficiency;
     /** Haste potion amplifier + 1, 0 if none. Haste boosts dig speed by 20% per level. */
@@ -42,7 +48,9 @@ public final class BreakContext {
         this.blockY = b.blockY;
         this.blockZ = b.blockZ;
         this.hardness = b.hardness;
-        this.correctTool = b.correctTool;
+        this.toolEffective = b.toolEffective;
+        this.canHarvest = b.canHarvest;
+        this.miningModelKnown = b.miningModelKnown;
         this.efficiency = b.efficiency;
         this.hasteLevel = b.hasteLevel;
         this.pingMillis = b.pingMillis;
@@ -63,7 +71,11 @@ public final class BreakContext {
     public int getBlockY() { return blockY; }
     public int getBlockZ() { return blockZ; }
     public float getHardness() { return hardness; }
-    public boolean isCorrectTool() { return correctTool; }
+    public boolean isToolEffective() { return toolEffective; }
+    /** True when the held tool satisfies the block's drop requirement (30-tick divisor applies). */
+    public boolean isCanHarvest() { return canHarvest; }
+    /** False when the block is not recognized by the vanilla mining model: both budgets are NaN. */
+    public boolean isMiningModelKnown() { return miningModelKnown; }
     public int getEfficiency() { return efficiency; }
     public int getHasteLevel() { return hasteLevel; }
     public int getPingMillis() { return pingMillis; }
@@ -83,24 +95,27 @@ public final class BreakContext {
 
     /**
      * Minimum number of milliseconds vanilla requires to break this block
-     * with the provided tool facts (efficiency and haste included). NaN when
-     * suppressed (correct tool, unknown tier). Used as a hard lower bound:
+     * with the provided tool facts (efficiency and haste included; the
+     * harvestability divisor applies — an iron pickaxe on obsidian takes
+     * never less than ~41.7 s). NaN when suppressed (unknown block mechanics,
+     * or effective-but-unmapped tool). Used as a hard lower bound:
      * breaking faster than this is impossible.
      */
     public double minimumBreakMillis() {
-        return BreakTimeModel.minimumMillis(hardness, correctTool, toolSpeedKnown, toolSpeed,
-                efficiency, hasteLevel);
+        return BreakTimeModel.minimumMillis(hardness, toolEffective, canHarvest, miningModelKnown,
+                toolSpeedKnown, toolSpeed, efficiency, hasteLevel);
     }
 
     /**
      * Expected break duration (ms) from dig start using the full vanilla
      * modifier stack (see {@link BreakTimeModel}). Compared against the
      * observed dig lifecycle, not the completion-to-completion interval.
-     * NaN when suppressed (correct tool, unknown tier — no timing verdict).
+     * NaN when suppressed (unknown block mechanics or effective-but-unmapped
+     * tool — no timing verdict).
      */
     public double expectedBreakMillis() {
-        return BreakTimeModel.expectedMillis(hardness, correctTool, toolSpeedKnown, toolSpeed,
-                efficiency, hasteLevel, miningFatigueLevel, inWater, hasAquaAffinity, onGround);
+        return BreakTimeModel.expectedMillis(hardness, toolEffective, canHarvest, miningModelKnown,
+                toolSpeedKnown, toolSpeed, efficiency, hasteLevel, miningFatigueLevel, inWater, hasAquaAffinity, onGround);
     }
 
     public static Builder builder() { return new Builder(); }
@@ -110,7 +125,9 @@ public final class BreakContext {
         private String blockType = "";
         private int blockX, blockY, blockZ;
         private float hardness;
-        private boolean correctTool = true;
+        private boolean toolEffective = true;
+        private boolean canHarvest = true;
+        private boolean miningModelKnown = true;
         private int efficiency;
         private int hasteLevel;
         private int pingMillis;
@@ -128,7 +145,9 @@ public final class BreakContext {
         public Builder blockType(String blockType) { this.blockType = blockType; return this; }
         public Builder block(int x, int y, int z) { this.blockX = x; this.blockY = y; this.blockZ = z; return this; }
         public Builder hardness(float hardness) { this.hardness = hardness; return this; }
-        public Builder correctTool(boolean correctTool) { this.correctTool = correctTool; return this; }
+        public Builder toolEffective(boolean toolEffective) { this.toolEffective = toolEffective; return this; }
+        public Builder canHarvest(boolean canHarvest) { this.canHarvest = canHarvest; return this; }
+        public Builder miningModelKnown(boolean miningModelKnown) { this.miningModelKnown = miningModelKnown; return this; }
         public Builder efficiency(int efficiency) { this.efficiency = efficiency; return this; }
         public Builder hasteLevel(int hasteLevel) { this.hasteLevel = hasteLevel; return this; }
         public Builder pingMillis(int pingMillis) { this.pingMillis = pingMillis; return this; }

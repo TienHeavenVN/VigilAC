@@ -26,8 +26,9 @@ import ac.vigil.packet.AttackAttemptSink;
  *       snapshots per invocation, bounding main-thread cost to O(nearby entities)
  *       per resolved attempt.</li>
  *   <li>Every snapshot is resolved exactly once; stale/invalid entity
- *       references are recorded as {@code INVALID} confidence and carry no
- *       evidence weight.</li>
+ *       references (entity removed, dead, in another world, or no bounding
+ *       box) are recorded as {@code INVALID} confidence and carry no evidence
+ *       weight.</li>
  * </ul>
  *
  * <h2>Ordering</h2>
@@ -44,10 +45,14 @@ public final class AttackAttemptDispatcher implements AttackAttemptSink {
     /** Maximum pending attack attempts. 256 ≈ 13 s of 20 attempts/s across all players per tick. */
     public static final int CAPACITY = 256;
     private static final int DRAIN_PER_TICK = 64;
-    /** Attempt↔damage pairing window (ms). */
-    public static final long PAIR_WINDOW_MILLIS = 400L;
-    /** Attempts older than this without a paired hit are classified as rejected. */
-    public static final long REJECT_AFTER_MILLIS = 400L;
+    /** Attempt↔damage pairing window (ms). Single source: {@link ReachEvidenceLedger#PAIR_WINDOW_MILLIS}. */
+    public static final long PAIR_WINDOW_MILLIS = ReachEvidenceLedger.PAIR_WINDOW_MILLIS;
+    /**
+     * Attempts older than this without a paired hit are classified as rejected.
+     * Strictly greater than {@link #PAIR_WINDOW_MILLIS}: rejection is final, so
+     * classification must not happen while a damage could still pair.
+     */
+    public static final long REJECT_AFTER_MILLIS = PAIR_WINDOW_MILLIS + 100L;
 
     private final PlayerDataManager dataManager;
     private final AttackGeometryResolver resolver;
@@ -131,8 +136,11 @@ public final class AttackAttemptDispatcher implements AttackAttemptSink {
     }
 
     private void sweep() {
-        // Paired hits are marked damage-matched by AttackListener (markDamaged). Entries
-        // that never paired are classified here; only over-range ones surface as evidence.
+        // Paired hits are marked damage-matched (markDamaged) and retroactively
+        // paired at resolution time (noteResolved) with damage processed before
+        // a deferred resolution — a landed hit is never classified rejected.
+        // Entries classified here provably outlived their pair window. Only
+        // over-range ones surface as monitor evidence.
         long now = System.currentTimeMillis();
         for (PlayerData data : dataManager.getAll()) {
             if (data == null) {

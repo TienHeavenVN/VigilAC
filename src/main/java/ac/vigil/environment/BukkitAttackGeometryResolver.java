@@ -46,6 +46,14 @@ public final class BukkitAttackGeometryResolver implements AttackGeometryResolve
         if (target == null) {
             return AttackGeometryResolution.unresolved("entity-not-found", itemContext);
         }
+        // A stale or mid-removal reference (entity id reused for a dying entity,
+        // untracked corpse, world unloading) must never yield reach evidence.
+        if (!target.isValid()) {
+            return AttackGeometryResolution.unresolved("entity-not-valid", itemContext);
+        }
+        if (target instanceof org.bukkit.entity.LivingEntity living && living.isDead()) {
+            return AttackGeometryResolution.unresolved("entity-dead", itemContext);
+        }
         BoundingBox box = target.getBoundingBox();
         if (box == null) {
             return AttackGeometryResolution.unresolved("no-bounding-box", itemContext);
@@ -62,7 +70,7 @@ public final class BukkitAttackGeometryResolver implements AttackGeometryResolve
 
     private static Entity findByEntityId(World world, Location eye, int entityId) {
         for (Entity candidate : world.getNearbyEntities(eye, SCAN_RADIUS, SCAN_RADIUS, SCAN_RADIUS)) {
-            if (candidate.getEntityId() == entityId) {
+            if (candidate.getEntityId() == entityId && candidate.isValid()) {
                 return candidate;
             }
         }

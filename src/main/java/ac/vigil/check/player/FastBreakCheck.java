@@ -13,8 +13,8 @@ import ac.vigil.detection.BreakContext;
  * <p><b>Path A — digging lifecycle (packetevents present).</b> The break is
  * matched against the server-observed dig start (START_DIGGING → FINISHED_DIGGING).
  * The expected dig duration uses the full vanilla modifier stack
- * ({@link BreakContext#expectedBreakMillis()}): hardness, correct tool,
- * Efficiency, Haste, Mining Fatigue, underwater without Aqua Affinity,
+ * ({@link BreakContext#expectedBreakMillis()}): hardness, tool effectiveness,
+ * harvestability, Efficiency, Haste, Mining Fatigue, underwater without Aqua Affinity,
  * off-ground, and the observed dig duration — compared per dig, not per
  * completion interval. Digs under the expectation accumulate missing time in
  * a decaying <b>penalty bucket</b>; VL requires sustained deficit across
@@ -159,9 +159,9 @@ public final class FastBreakCheck implements Check<BreakContext> {
 
         double amount = vlPerTrigger * Math.min(2.0D, minMillis / Math.max(1.0D, interval) );
         String debug = String.format(java.util.Locale.US,
-                "block=%s hardness=%.2f interval=%dms minimum=%dms streak=%d eff=%d haste=%d correctTool=%b ping=%d",
+                "block=%s hardness=%.2f interval=%dms minimum=%dms streak=%d eff=%d haste=%d effective=%b harvest=%b ping=%d",
                 ctx.getBlockType(), ctx.getHardness(), interval, (long) minMillis, streak,
-                ctx.getEfficiency(), ctx.getHasteLevel(), ctx.isCorrectTool(), ctx.getPingMillis());
+                ctx.getEfficiency(), ctx.getHasteLevel(), ctx.isToolEffective(), ctx.isCanHarvest(), ctx.getPingMillis());
         callback.onViolation(this, amount, debug);
     }
 }

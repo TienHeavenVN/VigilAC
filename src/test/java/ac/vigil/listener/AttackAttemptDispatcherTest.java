@@ -83,4 +83,40 @@ class AttackAttemptDispatcherTest {
         assertEquals(0L, data.reachEvidenceLedger().getResolvedCount());
         assertTrue(dispatcher.getOverflowCount() == 10L);
     }
+
+    @Test
+    void successfulHitNeverBecomesRejectedEvidenceWhileStaleAttemptDoes() {
+        // Full pipeline, deterministic: the landed hit is paired (its damage is
+        // processed BEFORE the deferred resolution drains), while a second,
+        // stale over-range attempt from the same attacker is left unpaired.
+        // The stale one outlives REJECT_AFTER_MILLIS and must be classified
+        // rejected exactly once; the paired hit never may be.
+        PlayerData data = dataManager.load(attacker);
+        AttackGeometryResolution overRange = AttackGeometryResolution.resolved(
+                0, 1.62, 0,
+                0, 0, 5.0D,
+                0.6D, 1.8D, 5.6D,
+                "ZOMBIE", null, "unknown", "DIAMOND_SWORD");
+        AttackAttemptDispatcher paired = new AttackAttemptDispatcher(dataManager, (a, id) -> overRange, Logger.getAnonymousLogger());
+        long now = System.currentTimeMillis();
+        paired.submit(AttackAttemptSnapshot.of(attacker, 777, now, "ATTACK"));
+        paired.submit(AttackAttemptSnapshot.of(attacker, 778, now - 10_000L, "ATTACK")); // stale, never pairs
+        paired.noteDamage(data, 777, now);                     // damage lands before resolution (deferred)
+        paired.drainTick();                                    // resolves both attempts in FIFO order
+        assertEquals(1L, data.reachEvidenceLedger().getDamagedCount(),
+                "the landed hit is paired at resolution time");
+        for (int i = 0; i < 20; i++) {
+            paired.drainTick();                                // 20th tick runs the rejection sweep
+        }
+        assertEquals(1L, data.reachEvidenceLedger().getRejectedCount(),
+                "only the unpaired stale attempt is rejected");
+        assertEquals(1L, paired.getRejectedOverRangeCount(),
+                "the stale over-range attempt is monitor evidence exactly once");
+    }
+
+    @Test
+    void rejectBoundaryIsStrictlyAfterPairWindow() {
+        assertTrue(AttackAttemptDispatcher.REJECT_AFTER_MILLIS > AttackAttemptDispatcher.PAIR_WINDOW_MILLIS,
+                "rejection must not be possible while a damage could still pair");
+    }
 }

@@ -30,13 +30,13 @@ class FastBreakCheckTest {
         return (c, vl, debug) -> flagged.add(vl);
     }
 
-    private BreakContext brk(float hardness, boolean correctTool, int efficiency, int haste, long timestamp) {
+    private BreakContext brk(float hardness, boolean toolEffective, int efficiency, int haste, long timestamp) {
         return BreakContext.builder()
                 .player(PLAYER)
                 .blockType("OBSIDIAN")
                 .block(0, 64, 0)
                 .hardness(hardness)
-                .correctTool(correctTool)
+                .toolEffective(toolEffective).canHarvest(toolEffective)
                 .efficiency(efficiency)
                 .hasteLevel(haste)
                 .timestamp(timestamp)

@@ -21,9 +21,12 @@ import ac.vigil.detection.BreakContext;
 import ac.vigil.exempt.ExemptionManager;
 
 /**
- * Feeds completed block breaks to the break checks with the exact tool
- * facts vanilla uses: block hardness, correct-tool classification, the
- * held item's Efficiency level and the haste amplifier.
+ * Feeds completed block breaks to the break checks with the exact mining
+ * facts vanilla uses: block hardness, tool-family effectiveness, drop
+ * harvestability, block-mechanics recognition, the held item's Efficiency
+ * level and the haste amplifier. Classification lives in
+ * {@link ac.vigil.detection.BreakTimeModel} so the model and the listener
+ * share one source of truth.
  */
 public final class BlockBreakListener implements Listener {
 
@@ -111,7 +114,9 @@ public final class BlockBreakListener implements Listener {
                 .blockType(blockName)
                 .block(block.getX(), block.getY(), block.getZ())
                 .hardness(hardness)
-                .correctTool(isCorrectTool(blockName, toolName))
+                .toolEffective(ac.vigil.detection.BreakTimeModel.toolEffective(blockName, toolName))
+                .canHarvest(ac.vigil.detection.BreakTimeModel.canHarvest(blockName, toolName))
+                .miningModelKnown(ac.vigil.detection.BreakTimeModel.isBlockRecognized(blockName))
                 .efficiency(efficiency)
                 .toolSpeedOrUnknown(toolSpeed)
                 .hasteLevel(haste)
@@ -144,64 +149,4 @@ public final class BlockBreakListener implements Listener {
         checkManager.evaluateBreak(context, data, pipeline.forPlayer(player, data));
     }
 
-    /**
-     * Heuristic tool-family classification. Unknown blocks and unknown tools
-     * default to {@code true} ("correct"), which only makes the computed
-     * lower bound shorter — i.e. the check gets quieter, never louder.
-     */
-    static boolean isCorrectTool(String blockName, String toolName) {
-        String block = blockName == null ? "" : blockName;
-        String tool = toolName == null ? "" : toolName;
-        if ("AIR".equals(tool)) {
-            return false; // breaking hard blocks with bare hands is never fast
-        }
-        boolean pickaxe = tool.contains("PICKAXE");
-        boolean axe = tool.contains("_AXE"); // excludes pickaxe/hoe via suffix shape
-        boolean shovel = tool.contains("SHOVEL");
-        boolean hoe = tool.contains("HOE");
-
-        if (containsAny(block, PICKAXE_BLOCKS)) {
-            return pickaxe;
-        }
-        if (containsAny(block, AXE_BLOCKS)) {
-            return axe;
-        }
-        if (containsAny(block, SHOVEL_BLOCKS)) {
-            return shovel;
-        }
-        if (containsAny(block, HOE_BLOCKS)) {
-            return hoe;
-        }
-        return true; // unknown family: assume correct (quieter, not louder)
-    }
-
-    private static boolean containsAny(String block, String[] markers) {
-        for (String marker : markers) {
-            if (block.contains(marker)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static final String[] PICKAXE_BLOCKS = {
-        "STONE", "DEEPSLATE", "BLACKSTONE", "BASALT", "ANDESITE", "DIORITE", "GRANITE",
-        "TUFF", "ORE", "ANCIENT_DEBRIS", "TERRACOTTA", "CONCRETE", "BRICK", "OBSIDIAN",
-        "NETHERRACK", "PRISMARINE", "PURPUR", "END_STONE", "AMETHYST", "GLOWSTONE",
-        "SANDSTONE", "RED_SANDSTONE", "MOSSY_COBBLESTONE", "COBBLED_DEEPSLATE", "SCULK"
-    };
-
-    private static final String[] AXE_BLOCKS = {
-        "LOG", "WOOD", "STEM", "HYPHAE", "PLANK", "BAMBOO", "FENCE", "DOOR", "TRAPDOOR",
-        "SIGN", "CHEST", "BARREL", "CRAFTING_TABLE", "LADDER", "BUTTON", "PRESSURE_PLATE"
-    };
-
-    private static final String[] SHOVEL_BLOCKS = {
-        "DIRT", "GRASS_BLOCK", "PODZOL", "MYCELIUM", "ROOTED_DIRT", "COARSE_DIRT",
-        "SAND", "GRAVEL", "CLAY", "SOUL_SAND", "SOUL_SOIL", "SNOW", "MUD", "SOD"
-    };
-
-    private static final String[] HOE_BLOCKS = {
-        "LEAVES", "HAY_BLOCK", "WART_BLOCK", "MOSS_BLOCK", "DRIED_KELP", "SHROOMLIGHT"
-    };
 }

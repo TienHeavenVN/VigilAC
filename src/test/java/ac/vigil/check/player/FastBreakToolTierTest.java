@@ -35,14 +35,14 @@ class FastBreakToolTierTest {
         return (c, vl, debug) -> flagged.add(vl);
     }
 
-    private BreakContext mine(String block, float hardness, boolean correctTool, Double tierSpeed,
+    private BreakContext mine(String block, float hardness, boolean toolEffective, Double tierSpeed,
                               int eff, int haste, long timestamp) {
         BreakContext.Builder builder = BreakContext.builder()
                 .player(PLAYER)
                 .blockType(block)
                 .block(0, 64, 0)
                 .hardness(hardness)
-                .correctTool(correctTool)
+                .toolEffective(toolEffective).canHarvest(toolEffective)
                 .efficiency(eff)
                 .hasteLevel(haste)
                 .timestamp(timestamp);
@@ -96,7 +96,7 @@ class FastBreakToolTierTest {
                     .blockType("OBSIDIAN")
                     .block(0, 64, 0)
                     .hardness(50.0F)
-                    .correctTool(true)
+                    .toolEffective(true).canHarvest(true)
                     .efficiency(5)
                     .toolSpeedUnknown()
                     .digDurationMillis(200L) // absurdly fast; still no verdict
@@ -118,7 +118,7 @@ class FastBreakToolTierTest {
                     .blockType("OBSIDIAN")
                     .block(0, 64, 0)
                     .hardness(50.0F)
-                    .correctTool(true)
+                    .toolEffective(true).canHarvest(true)
                     .efficiency(5)
                     .toolSpeed(9.0D)
                     .digDurationMillis(2_200L)
@@ -141,7 +141,7 @@ class FastBreakToolTierTest {
                     .blockType("OBSIDIAN")
                     .block(0, 64, 0)
                     .hardness(50.0F)
-                    .correctTool(true)
+                    .toolEffective(true).canHarvest(true)
                     .efficiency(5)
                     .toolSpeed(9.0D)
                     .digDurationMillis(1_400L)
