@@ -93,6 +93,12 @@ public final class VigilACConfig {
     public double reachVlPerAttackOver() { return getDouble("checks.reach.vl-per-attack-over", 1.0D); }
     public int reachEmaSamples() { return getInt("checks.reach.ema-samples", 6); }
 
+    /** Opt-in latency compensation for reach (default OFF: narrows detection, never extends it). */
+    public boolean reachLagCompensation() { return getBoolean("checks.reach.lag-compensation", false); }
+
+    /** Cap on the latency compensation, in blocks. */
+    public double reachLagCompensationMaxBlocks() { return getDouble("checks.reach.lag-compensation-max-blocks", 1.0D); }
+
     public long flyMinHoverMillis() { return (long) (getDouble("checks.fly.min-hover-millis", 3_000.0D)); }
     public double flyHoverTolerance() { return getDouble("checks.fly.hover-tolerance", 0.6D); }
     public int flyMinUpwardTicks() { return getInt("checks.fly.min-upward-ticks", 10); }

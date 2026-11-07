@@ -47,6 +47,17 @@ checks:
     vl-per-attack-over: 1.0
     # Samples used for the windowed (linearly weighted) reach average.
     ema-samples: 6
+    # Latency compensation is OFF by default: receipt-time positions make
+    # targets moving AWAY look farther, not closer - compensation never
+    # EXTENDS detection. Enable only after validating on real lag traces.
+    # When enabled, the target box is projected backward by its velocity over
+    # the attacker's ping, capped below.
+    lag-compensation: false
+    lag-compensation-max-blocks: 1.0
+    # Item-specific interaction range (1.21.11+ spear attack_range component):
+    # read from the held item when a verified Paper component API is present;
+    # otherwise the configured max-reach applies. No range values are ever
+    # invented - unknown means unknown.
 
   fly:
     enabled: true

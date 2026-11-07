@@ -29,6 +29,17 @@ public final class PacketEventsHook {
      * simply stay empty and every check degrades to its event-driven path.</p>
      */
     public static Handle tryRegister(JavaPlugin plugin, PlayerDataManager dataManager) {
+        return tryRegister(plugin, dataManager, null);
+    }
+
+    /**
+     * Same registration, plus the attack-attempt sink fed from netty threads.
+     * Pass {@code null} to keep pre-Phase-7 behaviour (no attack-attempt
+     * capture); the dispatcher is an internal listener package class and is
+     * deliberately not referenced here.
+     */
+    public static Handle tryRegister(JavaPlugin plugin, PlayerDataManager dataManager,
+                                     AttackAttemptSink attackAttemptSink) {
         Plugin packetEvents = plugin.getServer().getPluginManager().getPlugin("packetevents");
         if (packetEvents == null || !packetEvents.isEnabled()) {
             plugin.getLogger().info("packetevents not found; packet metrics/telemetry disabled (all checks work regardless)");
@@ -37,7 +48,7 @@ public final class PacketEventsHook {
         try {
             String version = packetEvents.getDescription().getVersion();
             Object metrics = PacketEventsMetrics.register(plugin, dataManager, version);
-            Object telemetry = PacketEventsTelemetry.register(plugin, dataManager, version);
+            Object telemetry = PacketEventsTelemetry.register(plugin, dataManager, version, attackAttemptSink);
             plugin.getLogger().info("Hooked into packetevents " + version + " (metrics + telemetry)");
             return new Handle(metrics, telemetry, "hooked packetevents " + version);
         } catch (Throwable throwable) {

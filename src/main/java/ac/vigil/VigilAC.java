@@ -24,6 +24,7 @@ import ac.vigil.config.VigilACConfig;
 import ac.vigil.data.PlayerData;
 import ac.vigil.data.PlayerDataManager;
 import ac.vigil.exempt.ExemptionManager;
+import ac.vigil.listener.AttackAttemptDispatcher;
 import ac.vigil.listener.AttackListener;
 import ac.vigil.listener.BlockBreakListener;
 import ac.vigil.listener.BlockPlaceListener;
@@ -57,6 +58,7 @@ public final class VigilAC extends JavaPlugin {
     private ExemptionManager exemptionManager;
     private ViolationPipeline pipeline;
     private PacketEventsHook.Handle packetEventsHandle;
+    private AttackAttemptDispatcher attackAttemptDispatcher;
 
     @Override
     public void onEnable() {
@@ -100,7 +102,12 @@ public final class VigilAC extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new ac.vigil.listener.HeldItemListener(playerDataManager), this);
 
-        this.packetEventsHandle = PacketEventsHook.tryRegister(this, playerDataManager);
+        // Attack-attempt pipeline: netty -> bounded queue -> main-thread drain (SL-1).
+        this.attackAttemptDispatcher = new AttackAttemptDispatcher(playerDataManager,
+                new ac.vigil.environment.BukkitAttackGeometryResolver(), getLogger(),
+                config.reachMaxReach() + config.reachTolerance());
+        this.packetEventsHandle = PacketEventsHook.tryRegister(this, playerDataManager, attackAttemptDispatcher);
+        getServer().getScheduler().runTaskTimer(this, attackAttemptDispatcher::drainTick, 1L, 1L);
 
         VigilACCommand command = new VigilACCommand(this);
         if (getCommand("vigilac") != null) {

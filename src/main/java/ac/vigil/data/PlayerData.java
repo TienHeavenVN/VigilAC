@@ -24,6 +24,7 @@ public final class PlayerData {
     private final ac.vigil.data.tracking.RotationTracker rotations = new ac.vigil.data.tracking.RotationTracker();
     private final ac.vigil.data.tracking.DiggingTracker digging = new ac.vigil.data.tracking.DiggingTracker();
     private final ac.vigil.data.tracking.FastBreakPenalty fastBreakPenalty = new ac.vigil.data.tracking.FastBreakPenalty();
+    private final ac.vigil.data.tracking.ReachEvidenceLedger reachEvidence = new ac.vigil.data.tracking.ReachEvidenceLedger();
     private volatile long lastDamageAt;
 
     /** VL per check name. */
@@ -221,6 +222,7 @@ public final class PlayerData {
         return clock.getAsLong() < knockbackGraceUntil;
     }
 
+
     public boolean isTeleportGrace() {
         return clock.getAsLong() < teleportGraceUntil;
     }
@@ -267,6 +269,11 @@ public final class PlayerData {
     /** Rolling window of reported look direction from packets; empty without packetevents. */
     public ac.vigil.data.tracking.RotationTracker rotationTracker() {
         return rotations;
+    }
+
+    /** Reach evidence reconstructed from packet-layer attack attempts (starts empty until packetevents sees attempts). */
+    public ac.vigil.data.tracking.ReachEvidenceLedger reachEvidenceLedger() {
+        return reachEvidence;
     }
 
     /** Server-side view of the client's block-digging lifecycle; empty without packetevents. */

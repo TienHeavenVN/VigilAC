@@ -27,6 +27,11 @@ import com.github.retrooper.packetevents.util.Vector3i;
  * {@code diggingTracker}). This class and its nested listener reference the
  * packetevents API directly, so it must only be loaded when the packetevents
  * plugin is present — {@link PacketEventsHook} guarantees that.
+
+ * <p>Attack attempts (ATTACK / INTERACT_ENTITY with ATTACK action) additionally
+ * produce an {@link AttackAttemptSnapshot} handed to the {@link AttackAttemptSink}
+ * (bounded, non-blocking, netty-safe) when one was provided; geometry resolution
+ * happens on the server thread.</p>
  *
  * <h2>Threading and cost model</h2>
  * <ul>
@@ -54,9 +59,30 @@ final class PacketEventsTelemetry {
     }
 
     static Object register(JavaPlugin plugin, PlayerDataManager dataManager, String version) {
+        return register(plugin, dataManager, version, null);
+    }
+
+    static Object register(JavaPlugin plugin, PlayerDataManager dataManager, String version, AttackAttemptSink attackAttemptSink) {
         return PacketEvents.getAPI()
                 .getEventManager()
-                .registerListener(new TelemetryListener(dataManager, plugin.getLogger()), PacketListenerPriority.NORMAL);
+                .registerListener(new TelemetryListener(dataManager, plugin.getLogger(), attackAttemptSink), PacketListenerPriority.NORMAL);
+    }
+
+    /** Submits the attempt snapshot plus the latest known rotation; called on netty threads. */
+    private static void submitAttackAttempt(AttackAttemptSink sink, PlayerData data,
+                                            java.util.UUID attacker, int entityId,
+                                            long now, String source) {
+        if (sink == null) {
+            return;
+        }
+        float[] rotation = data.rotationTracker().latestSample();
+        AttackAttemptSnapshot snapshot;
+        if (rotation != null) {
+            snapshot = new AttackAttemptSnapshot(attacker, entityId, now, true, rotation[0], rotation[1], source);
+        } else {
+            snapshot = AttackAttemptSnapshot.of(attacker, entityId, now, source);
+        }
+        sink.submit(snapshot);
     }
 
     static void unregister(Object registeredListener) {
@@ -75,11 +101,13 @@ final class PacketEventsTelemetry {
 
         private final PlayerDataManager dataManager;
         private final Logger logger;
+        private final AttackAttemptSink attackAttemptSink;
         private boolean warned;
 
-        TelemetryListener(PlayerDataManager dataManager, Logger logger) {
+        TelemetryListener(PlayerDataManager dataManager, Logger logger, AttackAttemptSink attackAttemptSink) {
             this.dataManager = dataManager;
             this.logger = logger;
+            this.attackAttemptSink = attackAttemptSink;
         }
 
         @Override
@@ -110,11 +138,13 @@ final class PacketEventsTelemetry {
                         int entityId = new com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientAttack(event).getEntityId();
                         data.attackAttemptLedger().noteAttempt(now, entityId);
                         data.monitor().noteAttackAttempt("entity=" + entityId + " src=ATTACK");
+                        submitAttackAttempt(attackAttemptSink, data, uuid, entityId, now, "ATTACK");
                     } else if (rawType == PacketType.Play.Client.INTERACT_ENTITY) {
                         WrapperPlayClientInteractEntity interact = new WrapperPlayClientInteractEntity(event);
                         if (interact.getAction() == WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
                             data.attackAttemptLedger().noteAttempt(now, interact.getEntityId());
                             data.monitor().noteAttackAttempt("entity=" + interact.getEntityId() + " src=INTERACT_ENTITY");
+                            submitAttackAttempt(attackAttemptSink, data, uuid, interact.getEntityId(), now, "INTERACT_ENTITY");
                         }
                     } else if (rawType == PacketType.Play.Client.ANIMATION || rawType == PacketType.Play.Client.PUNCH) {
                         data.swingTracker().noteSwing(now);

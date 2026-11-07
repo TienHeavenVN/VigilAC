@@ -76,6 +76,16 @@ public final class RotationTracker {
         return sum;
     }
 
+    /** Latest recorded (yaw, pitch) sample, or null when none within the window. */
+    public synchronized float[] latestSample() {
+        evict(System.currentTimeMillis());
+        Sample latest = samples.peekLast();
+        if (latest == null) {
+            return null;
+        }
+        return new float[]{ latest.yaw, latest.pitch };
+    }
+
     /** Angle between the latest two samples (degrees), or 0 when unknown. */
     public synchronized double lastDelta(long now) {
         evict(now);

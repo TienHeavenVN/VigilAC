@@ -13,14 +13,16 @@ import ac.vigil.config.VigilACConfig;
 import ac.vigil.data.PlayerData;
 import ac.vigil.data.PlayerDataManager;
 import ac.vigil.detection.AttackContext;
+import ac.vigil.environment.AttackRangeResolver;
 import ac.vigil.exempt.ExemptionManager;
 
 /**
  * Feeds melee attacks to the combat checks.
  *
- * <p>Only EntityDamageByEntityEvent is used: it is a main-thread, fully
- * reliable attack signal (attacking an entity always deals damage, which is
- * what triggers this event). Distance is evaluated against the target's
+ * <p>The damage event path is complemented by the packet-layer attack-attempt
+ * pipeline (see {@code AttackAttemptDispatcher}): rejected attacks never reach
+ * this listener, so they cannot be evaluated here — they surface as monitor
+ * evidence instead (SL-1). Distance is evaluated against the target's
  * axis-aligned bounding box derived from its width/height, which is correct
  * for every entity type.</p>
  */
@@ -72,6 +74,14 @@ public final class AttackListener implements Listener {
             default -> false;
         };
 
+        org.bukkit.util.Vector targetVelocity = target.getVelocity();
+        org.bukkit.inventory.ItemStack mainHand = attacker.getInventory().getItemInMainHand();
+        AttackRangeResolver.Result range = AttackRangeResolver.resolve(mainHand);
+
+        PlayerData data = dataManager.load(attacker.getUniqueId());
+        long previousAttackAt = data.combatTracker().getLastAttackAt();
+        long nowMillis = System.currentTimeMillis();
+
         AttackContext context = AttackContext.builder()
                 .attacker(attacker.getUniqueId())
                 .targetType(target.getType().name())
@@ -82,13 +92,22 @@ public final class AttackListener implements Listener {
                 .attackerInVehicle(attacker.isInsideVehicle())
                 .targetInVehicle(target.isInsideVehicle())
                 .pingMillis(attacker.getPing())
-                .timestamp(System.currentTimeMillis())
+                .timestamp(nowMillis)
                 .targetUniqueId(target.getUniqueId().toString())
                 .yaw(attackerLoc.getYaw())
                 .pitch(attackerLoc.getPitch())
+                .previousAttackAtMillis(previousAttackAt > 0L ? previousAttackAt : -1L)
+                .attackRangeMax(range.getMaxRange())
+                .attackRangeSource(range.getSource() == AttackRangeResolver.Source.COMPONENT ? "component" : "unknown")
+                .targetVelocity(targetVelocity.getX(), targetVelocity.getY(), targetVelocity.getZ())
+                .lagCompensationEnabled(cfg.reachLagCompensation())
+                .lagCompensationMaxBlocks(cfg.reachLagCompensationMaxBlocks())
                 .build();
 
-        PlayerData data = dataManager.load(attacker.getUniqueId());
+        // Pair with the packet-layer attempt, if any: the damage event confirms
+        // the swing connected — attempts that never pair are classified rejected.
+        data.reachEvidenceLedger().markDamaged(target.getEntityId(), nowMillis, 400L);
+
         // Combat statistics are recorded exactly once per attack here, not per
         // check, so CPS/interval windows are never double counted.
         data.combatTracker().recordAttack(context.getTimestamp());
