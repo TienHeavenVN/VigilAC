@@ -149,7 +149,7 @@ jobs:
           code=$?
           tail -n 30 compile.log
           if [ $code -ne 0 ]; then
-            grep -E 'error:' compile.log | head -10 | while IFS= read -r line; do
+            grep -E 'error:|Could not|What went wrong|Execution failed|not resolvable|FAILED' compile.log | head -12 | while IFS= read -r line; do
               printf '::error title=Compile26::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-500)"
             done
             exit $code
@@ -244,7 +244,7 @@ jobs:
           code=$?
           tail -n 25 compile.log
           if [ $code -ne 0 ]; then
-            grep -E 'error:' compile.log | head -10 | while IFS= read -r line; do
+            grep -E 'error:|Could not|What went wrong|Execution failed|not resolvable|FAILED' compile.log | head -12 | while IFS= read -r line; do
               printf '::error title=Compile::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-500)"
             done
             exit $code
