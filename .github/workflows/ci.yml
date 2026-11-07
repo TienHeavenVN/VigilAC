@@ -288,7 +288,8 @@ jobs:
               print(f'::error title=ManifestParse::not valid JSON: {ex}; head={raw[:200]}')
               raise SystemExit(1)
           print('::notice title=ManifestKeys::' + ','.join(list(manifest.keys())))
-          releases = [r['id'] for r in manifest.get('releases', []) if isinstance(r, dict) and 'id' in r]
+          versions = manifest.get('versions', [])
+          releases = [v['id'] for v in versions if isinstance(v, dict) and v.get('type') == 'release' and 'id' in v]
           print('::notice title=ManifestReleaseCount::' + str(len(releases)))
           target = sorted({v for v in releases if re.fullmatch(r'1\.21(\.\d+)?', v) or re.fullmatch(r'26\.\d+(\.\d+)?', v)},
                           key=lambda v: [int(p) for p in v.split('.')])
@@ -318,8 +319,11 @@ jobs:
           raw = open('paper-api-metadata.xml', encoding='utf8', errors='replace').read()
           versions = re.findall(r'<version>([^<]+)</version>', raw)
           print('::notice title=PaperApiListedCount::' + str(len(versions)))
-          for v in versions[-40:]:
-              print('::notice title=PaperApiListed::' + v)
+          legacy = [v for v in versions if re.fullmatch(r'1\.21(\.\d+)?-R0\.1-SNAPSHOT', v)]
+          print('::notice title=PaperApiListed-1.21.x::' + ', '.join(legacy))
+          for family in ('26.1.2', '26.2', '26.3', '26.1.1', '26.1'):
+              hits = [v for v in versions if v.startswith(family + '.') or v == family or v.startswith(family + '-')]
+              print(f'::notice title=PaperApiListed-{family}::count={len(hits)} latest={hits[-3:]}')
           PYEOF
 
       - name: Probe Fill v3 for 26.x STABLE builds (server jar availability)
