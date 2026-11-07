@@ -90,6 +90,30 @@ class AutoClickerCheckTest {
     }
 
     @Test
+    void highRateWithBurstJitterNeverConvicts() {
+        long now = 1_000_000L;
+        // ~26 CPS (10/66 ms alternating): far above the rate cap, but the
+        // interval distribution is pure alternation, stddev ~28 ms - far
+        // beyond machine-like regularity. This is skilled butterfly territory.
+        for (int i = 0; i < 60; i++) {
+            now += (i % 2 == 0) ? 66L : 10L;
+            attack(now);
+        }
+        assertTrue(flagged.isEmpty(),
+                "high CPS with noisy alternation must not convict, got " + flagged);
+    }
+
+    @Test
+    void highRateWithMachineRegularityStillConvicts() {
+        long now = 1_000_000L;
+        for (int i = 0; i < 45; i++) { // 33 ms exactly: ~30 CPS, stddev 0
+            now += 33L;
+            attack(now);
+        }
+        assertFalse(flagged.isEmpty(), "sustained 30 CPS with zero jitter must convict");
+    }
+
+    @Test
     void fewerThanMinSamplesNeverFlags() {
         // Documents the live-harness finding (Phase 4): attacks must DEAL
         // damage to be observed (AttackListener keys off

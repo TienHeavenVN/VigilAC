@@ -53,6 +53,10 @@ public final class DetectionContext {
      * already left it, so an at-feet read alone misses the charge.
      */
     private final boolean belowFeetSlippery;
+    /** Player is charging/riding a riptide trident (LivingEntity#isRiptiding). Vanilla fast water-skip motion otherwise reads as jesus. */
+    private final boolean riptiding;
+    /** Inside the bounded (<=3 s) vertical-impulse grace after a wind-burst-class velocity event (e.g. mace slam). */
+    private final boolean windBurstGrace;
 
     private DetectionContext(Builder b) {
         this.player = b.player;
@@ -91,6 +95,8 @@ public final class DetectionContext {
         this.onWaterSurface = b.onWaterSurface;
         this.frostWalker = b.frostWalker;
         this.belowFeetSlippery = b.belowFeetSlippery;
+        this.riptiding = b.riptiding;
+        this.windBurstGrace = b.windBurstGrace;
     }
 
     public java.util.UUID getPlayer() { return player; }
@@ -136,6 +142,10 @@ public final class DetectionContext {
     public boolean hasFrostWalker() { return frostWalker; }
     /** Block directly under the player's feet (at either end of the tick) is slippery-family; slime bounce evidence. */
     public boolean isBelowFeetSlippery() { return belowFeetSlippery; }
+    /** True while the riptide trident impulse is active (vanilla fast water-skip motion). */
+    public boolean isRiptiding() { return riptiding; }
+    /** True inside the bounded vertical-impulse grace granted after a wind-burst-class velocity event. */
+    public boolean isWindBurstGrace() { return windBurstGrace; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -157,6 +167,8 @@ public final class DetectionContext {
         private boolean onWaterSurface;
         private boolean frostWalker;
         private boolean belowFeetSlippery;
+        private boolean riptiding;
+        private boolean windBurstGrace;
 
         public Builder player(java.util.UUID player) { this.player = player; return this; }
         public Builder worldName(String worldName) { this.worldName = worldName == null ? "" : worldName; return this; }
@@ -185,6 +197,8 @@ public final class DetectionContext {
         public Builder onWaterSurface(boolean onWaterSurface) { this.onWaterSurface = onWaterSurface; return this; }
         public Builder frostWalker(boolean frostWalker) { this.frostWalker = frostWalker; return this; }
         public Builder belowFeetSlippery(boolean belowFeetSlippery) { this.belowFeetSlippery = belowFeetSlippery; return this; }
+        public Builder riptiding(boolean riptiding) { this.riptiding = riptiding; return this; }
+        public Builder windBurstGrace(boolean windBurstGrace) { this.windBurstGrace = windBurstGrace; return this; }
 
         public DetectionContext build() {
             if (player == null) {

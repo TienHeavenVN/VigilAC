@@ -45,6 +45,7 @@ public final class PlayerData {
 
     private long knockbackGraceUntil;
     private long teleportGraceUntil;
+    private long windBurstGraceUntil;
 
     private final java.util.concurrent.atomic.AtomicLong packetCount = new java.util.concurrent.atomic.AtomicLong();
     private long packetWindowStart;
@@ -224,6 +225,19 @@ public final class PlayerData {
     }
 
 
+
+    /** Vertical-dominant impulse grace (mace Wind Burst): bounded to 3 s by the caller. */
+    public void setWindBurstGraceUntil(long epochMillis) {
+        this.windBurstGraceUntil = Math.max(this.windBurstGraceUntil, epochMillis);
+    }
+
+    public long getWindBurstGraceUntil() {
+        return windBurstGraceUntil;
+    }
+
+    public boolean isWindBurstGrace() {
+        return clock.getAsLong() < windBurstGraceUntil;
+    }
 
     public boolean isTeleportGrace() {
         return clock.getAsLong() < teleportGraceUntil;

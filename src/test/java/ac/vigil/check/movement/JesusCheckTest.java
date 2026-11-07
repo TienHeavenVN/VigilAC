@@ -74,6 +74,56 @@ class JesusCheckTest {
         assertEquals(17, flagged.size(), "only observations past the streak gate add VL");
     }
 
+    private DetectionContext surfaceRiptiding(long timestamp, boolean riptiding, boolean windBurstGrace) {
+        return DetectionContext.builder()
+                .player(PLAYER)
+                .from(0.0D, 63.0D, 0.0D)
+                .to(0.8D, 63.5D, 0.0D)
+                .onWaterSurface(true)
+                .riptiding(riptiding)
+                .windBurstGrace(windBurstGrace)
+                .serverTps(20.0D)
+                .timestamp(timestamp)
+                .build();
+    }
+
+    @Test
+    void riptidingNeverFlags() {
+        long now = 1_000_000L;
+        for (int i = 0; i < 40; i++) {
+            now += 50L;
+            check.evaluate(surfaceRiptiding(now, true, false), data, sink());
+        }
+        assertTrue(flagged.isEmpty(), "riptide water-skip motion must never flag jesus");
+    }
+
+    @Test
+    void windBurstGraceNeverFlags() {
+        long now = 1_000_000L;
+        for (int i = 0; i < 40; i++) {
+            now += 50L;
+            check.evaluate(surfaceRiptiding(now, false, true), data, sink());
+        }
+        assertTrue(flagged.isEmpty(), "bounded wind-burst grace must never flag jesus");
+    }
+
+    @Test
+    void graceEndResumesNormalDetection() {
+        long now = 1_000_000L;
+        // 40 ticks inside the bounded grace: no evidence.
+        for (int i = 0; i < 40; i++) {
+            now += 50L;
+            check.evaluate(surfaceRiptiding(now, false, true), data, sink());
+        }
+        assertTrue(flagged.isEmpty());
+        // Grace expires; sustained floating must flag again.
+        for (int i = 0; i < 30; i++) {
+            now += 50L;
+            check.evaluate(surfaceRiptiding(now, false, false), data, sink());
+        }
+        assertFalse(flagged.isEmpty(), "after the bounded grace expires, sustained water walking flags");
+    }
+
     @Test
     void frostWalkerNeverFlags() {
         long now = 1_000_000L;

@@ -102,7 +102,7 @@ final class PacketEventsTelemetry {
         private final PlayerDataManager dataManager;
         private final Logger logger;
         private final AttackAttemptSink attackAttemptSink;
-        private boolean warned;
+        private final java.util.concurrent.atomic.AtomicBoolean warned = new java.util.concurrent.atomic.AtomicBoolean();
 
         TelemetryListener(PlayerDataManager dataManager, Logger logger, AttackAttemptSink attackAttemptSink) {
             this.dataManager = dataManager;
@@ -155,8 +155,7 @@ final class PacketEventsTelemetry {
                     }
                 }
             } catch (Throwable throwable) {
-                if (!warned) {
-                    warned = true;
+                if (warned.compareAndSet(false, true)) {
                     logger.warning("packetevents telemetry failed once (further failures suppressed): " + throwable);
                 }
             }

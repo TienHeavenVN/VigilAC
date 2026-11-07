@@ -56,6 +56,13 @@ public final class BlockBreakListener implements Listener {
             return;
         }
 
+        // Creative/spectator break blocks instantly in vanilla; no survival evidence exists.
+        if (event.getPlayer().getGameMode() == org.bukkit.GameMode.CREATIVE
+                || event.getPlayer().getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+            return;
+        }
+
+        long nowMillis = System.currentTimeMillis();
         Block block = event.getBlock();
         String blockName = block.getType().name();
         float hardness = block.getType().getHardness();
@@ -67,6 +74,8 @@ public final class BlockBreakListener implements Listener {
             toolName = hand.getType().name();
             efficiency = hand.getEnchantmentLevel(Enchantment.EFFICIENCY);
         }
+        // Tool tier from the material family; UNKNOWN (modded/copper/hand) suppresses timing verdicts.
+        Double toolSpeed = ac.vigil.detection.BreakTimeModel.toolSpeedFor(toolName);
 
         int haste = 0;
         int fatigue = 0;
@@ -104,19 +113,19 @@ public final class BlockBreakListener implements Listener {
                 .hardness(hardness)
                 .correctTool(isCorrectTool(blockName, toolName))
                 .efficiency(efficiency)
+                .toolSpeedOrUnknown(toolSpeed)
                 .hasteLevel(haste)
                 .miningFatigueLevel(fatigue)
                 .inWater(inWater)
                 .aquaAffinity(aquaAffinity)
                 .onGround(onGround)
                 .pingMillis(player.getPing())
-                .timestamp(System.currentTimeMillis());
+                .timestamp(nowMillis);
 
         PlayerData data = dataManager.load(player.getUniqueId());
         // Dig lifecycle: if the digging tracker saw START_DIGGING for this break,
         // carry the dig duration so the check can use the real break-time math
         // instead of the completion-interval heuristic.
-        long nowMillis = System.currentTimeMillis();
         ac.vigil.data.tracking.DiggingTracker.CompletedDig completedDig = data.diggingTracker().complete(nowMillis);
         if (completedDig != null
                 && completedDig.getDig().getX() == block.getX()

@@ -147,8 +147,9 @@ checks:
     warn-vl: 10.0
     kick-vl: 15.0
     max-vl: 20.0
-    # Hardware ceiling is ~20 CPS; flag sustain above this.
-    cps-cap: 20.5
+    # Sustained clicks/s above this AND machine-like interval regularity
+    # flag. Rate alone NEVER convicts (butterfly/mobile touch).
+    cps-cap: 25.0
     min-samples: 10
     # Robotic-window gate: humans have stddev 40-120ms; clickers are metronomic.
     robotic-mean-max: 150.0
@@ -190,6 +191,11 @@ checks:
     max-per-second: 7.0
     window-millis: 2000
     vl-per-placement: 1.0
+  # Tool-tier aware since Phase 7: known vanilla tools (wood 2 / stone 4 /
+  # iron 6 / gold 12 / diamond 8 / netherite 9) get the full vanilla break-time
+  # budget (efficiency, haste, fatigue, water, air, correct tool). An UNKNOWN
+  # tool tier (hand, modded, copper-era, unmappable) suppresses the timing
+  # verdict entirely - no evidence accrues, ever.
   fast-break:
     enabled: true
     alert-vl: 5.0

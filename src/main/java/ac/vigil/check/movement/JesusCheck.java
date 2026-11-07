@@ -37,6 +37,13 @@ import ac.vigil.detection.DetectionContext;
  *       water never accumulates evidence.</li>
  *   <li>Knockback/teleport grace resets the streak (boat splashes and piston
  *       bounces land players on the surface edge for one tick).</li>
+ *   <li>Riptide trident motion is a bounded, evidence-based exemption
+ *       (isRiptiding, a server-side state — never inferred from speed alone):
+ *       a riptiding player skips across water by design.</li>
+ *   <li>The mace Wind Burst impulse gets a bounded (≤3 s) grace set only on a
+ *       <em>vertical-dominant</em> server-set velocity event (|vy| &gt; 0.45
+ *       and &gt; 60% of total speed) — lateral knockback never triggers it,
+ *       and it expires quickly, so it cannot launder sustained water walking.</li>
  *   <li>Jump arcs over a water body: each arc leaves the feet dry over water,
  *       but falling back into the water resets the streak via {@code inLiquid}.
  *       Chaining arcs without once dipping the feet into the water is not
@@ -79,6 +86,8 @@ public final class JesusCheck implements Check<DetectionContext> {
                 || ctx.isTeleportGrace() || ctx.isKnockbackGrace()
                 || ctx.isLevitation() || ctx.isSlowFalling()
                 || ctx.hasFrostWalker()
+                || ctx.isRiptiding()
+                || ctx.isWindBurstGrace()
                 || ctx.getServerTps() < MIN_TPS) {
             tracker.resetWaterSurface();
             return;

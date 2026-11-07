@@ -16,8 +16,11 @@ import ac.vigil.detection.AttackContext;
  *       the attack pipeline — see {@code AttackListener} — so every combat
  *       check observes the same stream exactly once).</li>
  *   <li><b>Rate gate</b>: sustained CPS (attacks in the trailing 1 s) above
- *       {@code cpsCap} (default 20.5, above the ~20/s hardware ceiling) with
- *       at least {@code minSamples} intervals on record.</li>
+ *       {@code cpsCap} (default 25.0) with at least {@code minSamples}
+ *       intervals on record — <b>and</b> machine-like interval regularity
+ *       (stddev &lt; 2x the robotic boundary). Rate alone never convicts:
+ *       butterfly/mobile clicking is fast but noisy, and noise is what keeps
+ *       humans unflaggable here.</li>
  *   <li><b>Regularity gate</b> (the stronger signal): humans produce bursty,
  *       noisy intervals (stddev typically 40-120 ms); clickers fire near-
  *       metronomically. If the window mean is below {@code roboticMeanMax}
@@ -94,13 +97,24 @@ public final class AutoClickerCheck implements Check<AttackContext> {
         int rateSamples = Math.max(samples, attemptSamples);
 
         if (rateSamples >= minSamples && rate > cpsCap) {
-            double amount = vlPerTrigger * Math.min(2.0D, rate / cpsCap);
-            String debug = String.format(java.util.Locale.US,
-                    "rate=%.1f/s cps=%.1f attemptRate=%.1f cap=%.1f samples=%d/%d ping=%d",
-                    rate, cps, attemptRate, cpsCap, samples, attemptSamples, ctx.getPingMillis());
-            callback.onViolation(this, amount, debug);
-            tracker.resetRoboticStreak();
-            return;
+            // High rate ALONE is not evidence: butterfly clicking and fast
+            // mobile touch sustain ~20-30 CPS with noisy intervals. The rate
+            // path corroborates with machine-like regularity; anything burstier
+            // than ~2x the robotic stddev boundary is indistinguishable from
+            // skilled human clicking on this signal alone, so it degrades into
+            // the regularity analysis instead of convicting here.
+            double stddev = samples > 0 ? tracker.intervalStddev() : Double.NaN;
+            boolean regular = samples >= 2 && !Double.isNaN(stddev) && stddev < roboticStddevMax * 2.0D;
+            if (regular) {
+                double amount = vlPerTrigger * Math.min(2.0D, rate / cpsCap);
+                String debug = String.format(java.util.Locale.US,
+                        "rate=%.1f/s cps=%.1f attemptRate=%.1f cap=%.1f samples=%d/%d stddev=%.1f ping=%d",
+                        rate, cps, attemptRate, cpsCap, samples, attemptSamples, stddev, ctx.getPingMillis());
+                callback.onViolation(this, amount, debug);
+                tracker.resetRoboticStreak();
+                return;
+            }
+            // Not regular enough: fall through to the metronomic analysis.
         }
 
         boolean roboticWindow = samples >= roboticMinSamples;

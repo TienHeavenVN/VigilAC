@@ -143,6 +143,8 @@ public final class PlayerMoveListener implements Listener {
                 .inLiquid(inLiquid)
                 .onSlipperyBlock(slippery)
                 .belowFeetSlippery(belowFeetSlippery)
+                .riptiding(player.isRiptiding())
+                .windBurstGrace(data.isWindBurstGrace())
                 .inWeb(inWeb)
                 .onSlowBlock(onSlowBlock)
                 .onWaterSurface(onWaterSurface)

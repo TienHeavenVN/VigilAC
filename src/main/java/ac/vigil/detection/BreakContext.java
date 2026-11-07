@@ -30,6 +30,10 @@ public final class BreakContext {
     private final long digDurationMillis;
     /** True when the held item or destroy direction changed mid-dig: tool timing is then inconclusive. */
     private final boolean digInconclusive;
+    /** Base dig speed of the held tool family; 1.0 (hand speed) when built without tool data (test convenience). */
+    private final double toolSpeed;
+    /** False when the tool tier could not be mapped to a known vanilla family — timing verdicts are suppressed. */
+    private final boolean toolSpeedKnown;
 
     private BreakContext(Builder b) {
         this.player = b.player;
@@ -49,6 +53,8 @@ public final class BreakContext {
         this.onGround = b.onGround;
         this.digDurationMillis = b.digDurationMillis;
         this.digInconclusive = b.digInconclusive;
+        this.toolSpeed = b.toolSpeed;
+        this.toolSpeedKnown = b.toolSpeedKnown;
     }
 
     public java.util.UUID getPlayer() { return player; }
@@ -70,66 +76,31 @@ public final class BreakContext {
     public long getDigDurationMillis() { return digDurationMillis; }
     /** True when tool/destroy direction changed mid-dig; timing evidence is inconclusive. */
     public boolean isDigInconclusive() { return digInconclusive; }
+    /** Base dig speed of the held tool; 1.0 when the context was built without tool data. */
+    public double getToolSpeed() { return toolSpeed; }
+    /** False when the tool tier is unknown (e.g. modded, copper-era, none): timing verdicts must be suppressed. */
+    public boolean isToolSpeedKnown() { return toolSpeedKnown; }
 
     /**
      * Minimum number of milliseconds vanilla requires to break this block
-     * with the provided tool facts, assuming best-case play (efficiency and
-     * haste included, haste capped at level 3). Used as a hard lower bound:
+     * with the provided tool facts (efficiency and haste included). NaN when
+     * suppressed (correct tool, unknown tier). Used as a hard lower bound:
      * breaking faster than this is impossible.
      */
     public double minimumBreakMillis() {
-        if (hardness <= 0.0F) {
-            return 0.0D; // instant-break material
-        }
-        if (!correctTool) {
-            return (double) hardness * 5.0D * 1_000.0D; // wrong tool: 5x divisor
-        }
-        int eff = Math.max(0, Math.min(5, efficiency)); // vanilla efficiency caps at V
-        double speed = 1.0D + (eff + 1) * (eff + 1);
-        int haste = Math.max(0, Math.min(3, hasteLevel));
-        speed *= 1.0D + 0.2D * haste;
-        return (double) hardness * 1.5D / speed * 1_000.0D;
+        return BreakTimeModel.minimumMillis(hardness, correctTool, toolSpeedKnown, toolSpeed,
+                efficiency, hasteLevel);
     }
 
     /**
      * Expected break duration (ms) from dig start using the full vanilla
-     * modifier stack. Compared against the observed dig lifecycle, not the
-     * completion-to-completion interval.
-     *
-     * <ul>
-     *   <li>correct tool: speed = 1 + (efficiency &gt; 0 ? efficiency² + 1 : 0)
-     *       (vanilla Efficiency bonus on the base tool speed, base treated as 1.0
-     *       — conservative, matches the hardness × 30 scale)</li>
-     *   <li>Haste multiplies by (1 + 0.2 × level), capped at Haste II+ VI scale used vanilla-side</li>
-     *   <li>Mining Fatigue divides by 1 / (0.3 ^ level) i.e. multiplies by 0.3^level</li>
-     *   <li>underwater without Aqua Affinity: ÷ 5</li>
-     *   <li>not on the ground: ÷ 5</li>
-     *   <li>wrong tool: hardness × 5 (the vanilla 100 divisor)</li>
-     * </ul>
+     * modifier stack (see {@link BreakTimeModel}). Compared against the
+     * observed dig lifecycle, not the completion-to-completion interval.
+     * NaN when suppressed (correct tool, unknown tier — no timing verdict).
      */
     public double expectedBreakMillis() {
-        if (hardness <= 0.0F) {
-            return 0.0D; // instant-break material
-        }
-        int eff = Math.max(0, Math.min(5, efficiency));
-        double speed = correctTool ? (1.0D + (eff > 0 ? (double) eff * eff + 1.0D : 0.0D)) : 1.0D;
-        int haste = Math.max(0, Math.min(4, hasteLevel));
-        if (haste > 0) {
-            speed *= 1.0D + 0.2D * haste;
-        }
-        int fatigue = Math.max(0, Math.min(5, miningFatigueLevel));
-        if (fatigue > 0) {
-            speed *= Math.pow(0.3D, fatigue);
-        }
-        if (inWater && !hasAquaAffinity) {
-            speed *= 0.2D;
-        }
-        if (!onGround) {
-            speed *= 0.2D;
-        }
-        return correctTool
-                ? (double) hardness * 1.5D / speed * 1_000.0D
-                : (double) hardness * 5.0D / speed * 1_000.0D;
+        return BreakTimeModel.expectedMillis(hardness, correctTool, toolSpeedKnown, toolSpeed,
+                efficiency, hasteLevel, miningFatigueLevel, inWater, hasAquaAffinity, onGround);
     }
 
     public static Builder builder() { return new Builder(); }
@@ -150,6 +121,8 @@ public final class BreakContext {
         private boolean onGround = true;
         private long digDurationMillis = -1L;
         private boolean digInconclusive;
+        private double toolSpeed = 1.0D; // bare-hand speed: most conservative (longest expected time) when no tool data is supplied
+        private boolean toolSpeedKnown = true;
 
         public Builder player(java.util.UUID player) { this.player = player; return this; }
         public Builder blockType(String blockType) { this.blockType = blockType; return this; }
@@ -166,6 +139,21 @@ public final class BreakContext {
         public Builder onGround(boolean onGround) { this.onGround = onGround; return this; }
         public Builder digDurationMillis(long digDurationMillis) { this.digDurationMillis = digDurationMillis; return this; }
         public Builder digInconclusive(boolean digInconclusive) { this.digInconclusive = digInconclusive; return this; }
+        /** Held item is a known vanilla tool family with base speed {@code toolSpeed}. */
+        public Builder toolSpeed(double toolSpeed) { this.toolSpeed = toolSpeed; this.toolSpeedKnown = true; return this; }
+        /** Maps a nullable tier speed: null = timing verdicts suppressed, otherwise the known base speed. */
+        public Builder toolSpeedOrUnknown(Double toolSpeed) {
+            if (toolSpeed == null) {
+                this.toolSpeed = 1.0D;
+                this.toolSpeedKnown = false;
+            } else {
+                this.toolSpeed = toolSpeed;
+                this.toolSpeedKnown = true;
+            }
+            return this;
+        }
+        /** Tool tier could not be mapped reliably: timing verdicts are suppressed (never guessed). */
+        public Builder toolSpeedUnknown() { this.toolSpeed = 1.0D; this.toolSpeedKnown = false; return this; }
 
         public BreakContext build() {
             if (player == null) {

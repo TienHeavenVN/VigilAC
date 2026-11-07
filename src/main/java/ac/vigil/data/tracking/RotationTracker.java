@@ -76,6 +76,31 @@ public final class RotationTracker {
         return sum;
     }
 
+    /**
+     * Largest angular step between two consecutive samples inside the trailing
+     * {@code recentMillis} (degrees, yaw/pitch hypot of the wrapped delta).
+     * Unlike {@link #angularDistanceCovered(long, long)} (total motion, which
+     * smears a flick into a large sum), this isolates the single-tick burst a
+     * genuine aim snap produces. 0 when fewer than two samples exist in the
+     * window. Note: the first in-window sample pairs with its predecessor; a
+     * predecessor older than {@code recentMillis} still bounds the first pair.
+     */
+    public synchronized double maxDeltaInWindow(long now, long recentMillis) {
+        evict(now);
+        long from = now - recentMillis;
+        double max = 0.0D;
+        Sample prev = null;
+        for (Sample s : samples) {
+            if (prev != null && s.time >= from) {
+                double yd = shortestAngleDegrees(prev.yaw, s.yaw);
+                double pd = Math.abs(prev.pitch - s.pitch);
+                max = Math.max(max, Math.hypot(yd, pd));
+            }
+            prev = s;
+        }
+        return max;
+    }
+
     /** Latest recorded (yaw, pitch) sample, or null when none within the window. */
     public synchronized float[] latestSample() {
         evict(System.currentTimeMillis());

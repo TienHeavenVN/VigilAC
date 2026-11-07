@@ -86,6 +86,25 @@ class KillAuraCheckTest {
     }
 
     @Test
+    void anchorPlusAttemptRateWithSwingsDoesNotFlag() {
+        // Packetevents attempt rate of ~12/s with an irregular damage cadence
+        // and matching arm swings: anchor + raw attempt rate, but NO machine
+        // evidence. AUDIT-16: attempt rate alone must never suffice.
+        long now = 1_000_000L;
+        String[] targets = {"a", "b", "c"};
+        for (int i = 0; i < targets.length; i++) {
+            now += 400L + (i * 137L) % 230L;
+            for (int j = 0; j < 4; j++) {
+                data.attackAttemptLedger().noteAttempt(now + j, 100 + i);
+                data.swingTracker().noteSwing(now + j); // one swing per attempt: not swingless
+            }
+            data.combatTracker().recordAttack(now);
+            check.evaluate(attackAt(targets[i], now), data, sink());
+        }
+        assertTrue(flagged.isEmpty(), "attempt rate without regularity or swinglessness must not convict");
+    }
+
+    @Test
     void singleTargetNeverFlags() {
         long now = 1_000_000L;
         for (int i = 0; i < 10; i++) {

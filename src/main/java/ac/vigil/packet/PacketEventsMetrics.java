@@ -55,7 +55,7 @@ final class PacketEventsMetrics {
 
         private final PlayerDataManager dataManager;
         private final Logger logger;
-        private boolean warned;
+        private final java.util.concurrent.atomic.AtomicBoolean warned = new java.util.concurrent.atomic.AtomicBoolean();
 
         MetricsListener(PlayerDataManager dataManager, Logger logger) {
             this.dataManager = dataManager;
@@ -80,8 +80,7 @@ final class PacketEventsMetrics {
                     data.movementTracker().noteRawMovePacket(System.currentTimeMillis());
                 }
             } catch (Throwable throwable) {
-                if (!warned) {
-                    warned = true;
+                if (warned.compareAndSet(false, true)) {
                     logger.warning("packetevents metrics failed once (further failures suppressed): " + throwable);
                 }
             }

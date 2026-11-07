@@ -21,7 +21,10 @@ import ac.vigil.detection.BreakContext;
  * breaks ({@code penaltyGraceMillis}, default 1500 ms) — a marginal single
  * dig never flags; a physically impossible deficit may do so on its own.
  * If tool or destroy-direction changed mid-dig the dig is marked inconclusive
- * and excluded from timing verdicts entirely.</p>
+ * and excluded from timing verdicts entirely. When the held item cannot be
+ * mapped to a known vanilla tool family (modded, copper-tier, hand on a
+ * correct-classified block), the timing verdict is <b>suppressed</b>: no
+ * penalty credit, no streak, evidence noted — never an invented tool speed.</p>
  * <p><b>Path B — completion interval (fallback; also without packetevents).</b>
  * Each break carries the vanilla lower-bound duration
  * ({@link BreakContext#minimumBreakMillis()}); blocks are mined strictly
@@ -97,6 +100,12 @@ public final class FastBreakCheck implements Check<BreakContext> {
                 return; // tool changed mid-dig: cannot judge the timing
             }
             double expected = ctx.expectedBreakMillis();
+            if (Double.isNaN(expected)) {
+                data.monitor().noteCheckEvidence(getName(), String.format(java.util.Locale.US,
+                        "suppressed reason=unknown-tool-tier dig=%dms block=%s",
+                        ctx.getDigDurationMillis(), ctx.getBlockType()));
+                return; // no timing verdict for tools we cannot identify - never a guess
+            }
             long duration = ctx.getDigDurationMillis();
             double missing = expected - duration - TICK_LEEWAY_MILLIS;
             if (missing > 0.0D) {
@@ -123,6 +132,12 @@ public final class FastBreakCheck implements Check<BreakContext> {
         long interval = tracker.breakInterval(now);
         tracker.noteBreak(now);
 
+        if (Double.isNaN(minMillis)) {
+            tracker.resetImpossibleBreakStreak();
+            data.monitor().noteCheckEvidence(getName(), String.format(java.util.Locale.US,
+                    "suppressed reason=unknown-tool-tier block=%s", ctx.getBlockType()));
+            return; // no lower bound can be computed - no timing verdict
+        }
         if (minMillis <= TICK_LEEWAY_MILLIS) {
             tracker.resetImpossibleBreakStreak();
             data.monitor().noteExemption(getName(), "instant-break material (vanilla lower bound <= 50ms)");

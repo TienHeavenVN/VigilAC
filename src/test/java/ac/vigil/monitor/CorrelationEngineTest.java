@@ -63,6 +63,28 @@ class CorrelationEngineTest {
     }
 
     @Test
+    void staleTeleportNoLongerSuppresses() {
+        // 15s+ stale suppressing evidence was the pre-Phase-7 behaviour; a
+        // 3-second-old teleport is not a plausible explanation for THIS landing.
+        monitor.noteMove(sample().onGround(true).build());
+        monitor.noteTeleport("test");
+        now.addAndGet(3_000L);
+        CorrelationResult result = engine.correlateNoFall(monitor, 6.0D, 3.5D);
+        assertTrue(result.suppressing().isEmpty(), "a 3s-old teleport must not excuse this landing");
+        assertTrue(result.confidence() > 0.0D);
+    }
+
+    @Test
+    void staleFallDamageNoLongerSuppresses() {
+        monitor.noteMove(sample().onGround(true).build());
+        monitor.noteDamage(true);
+        now.addAndGet(2_000L);
+        CorrelationResult result = engine.correlateNoFall(monitor, 5.5D, 3.5D);
+        assertTrue(result.suppressing().isEmpty(), "a 2s-old fall-damage event must not excuse this landing");
+        assertTrue(result.confidence() > 0.0D);
+    }
+
+    @Test
     void unrelatedDamageOlderThanWindowStillSupports() {
         // Generic damage 20s ago (beyond RECENT_WINDOW_MILLIS) must not suppress anything.
         monitor.noteDamage(false);

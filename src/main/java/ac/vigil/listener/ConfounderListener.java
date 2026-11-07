@@ -74,6 +74,13 @@ public final class ConfounderListener implements Listener {
         long grace = config.get().velocityGraceMillis() + (long) (speed * 100.0D);
         long now = System.currentTimeMillis();
         data.setKnockbackGraceUntil(now + Math.min(grace, 2_000L));
+        // Wind Burst (mace slam) signature: vertical-dominant impulse from a
+        // server-set velocity. Bounded to 3 s; consults only the vertical
+        // component, so lateral knockback does NOT trigger the grace.
+        double vy = Math.abs(event.getVelocity().getY());
+        if (vy > 0.6D * Math.max(speed, 1.0E-4D) && vy > 0.45D) {
+            data.setWindBurstGraceUntil(now + 3_000L);
+        }
         data.monitor().noteVelocity(speed);
     }
 }

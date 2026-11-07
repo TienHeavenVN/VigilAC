@@ -21,7 +21,13 @@ import java.util.List;
  */
 public final class CorrelationEngine {
 
-    public static final long RECENT_WINDOW_MILLIS = 15_000L;
+    /** Window for the suspicious-landing support counter. */
+    public static final long RECENT_WINDOW_MILLIS = 2_000L;
+    /** Per-factor suppression windows — a stale impulse must NOT excuse a landing. */
+    public static final long TELEPORT_SUPPRESS_MILLIS = 2_000L;
+    public static final long VELOCITY_SUPPRESS_MILLIS = 1_500L;
+    public static final long FALL_DAMAGE_SUPPRESS_MILLIS = 1_500L;
+    public static final long WORLD_CHANGE_SUPPRESS_MILLIS = 2_000L;
 
     /**
      * NoFall corroboration at the moment of a suspicious landing.
@@ -40,19 +46,19 @@ public final class CorrelationEngine {
         }
 
         long teleportAge = monitor.ageOfLatest(EvidenceType.TELEPORT);
-        if (teleportAge >= 0L && teleportAge <= RECENT_WINDOW_MILLIS) {
+        if (teleportAge >= 0L && teleportAge <= TELEPORT_SUPPRESS_MILLIS) {
             suppressing.add(String.format(java.util.Locale.US, "teleport %dms ago", teleportAge));
         }
         long velocityAge = monitor.ageOfLatest(EvidenceType.VELOCITY_IMPULSE);
-        if (velocityAge >= 0L && velocityAge <= RECENT_WINDOW_MILLIS) {
+        if (velocityAge >= 0L && velocityAge <= VELOCITY_SUPPRESS_MILLIS) {
             suppressing.add(String.format(java.util.Locale.US, "velocity impulse %dms ago", velocityAge));
         }
         long fallDamageAge = monitor.ageOfLatest(EvidenceType.DAMAGE_FALL);
-        if (fallDamageAge >= 0L && fallDamageAge <= RECENT_WINDOW_MILLIS) {
+        if (fallDamageAge >= 0L && fallDamageAge <= FALL_DAMAGE_SUPPRESS_MILLIS) {
             suppressing.add(String.format(java.util.Locale.US, "fall damage %dms ago", fallDamageAge));
         }
         long worldAge = monitor.ageOfLatest(EvidenceType.WORLD_CHANGE);
-        if (worldAge >= 0L && worldAge <= RECENT_WINDOW_MILLIS) {
+        if (worldAge >= 0L && worldAge <= WORLD_CHANGE_SUPPRESS_MILLIS) {
             suppressing.add(String.format(java.util.Locale.US, "world change %dms ago", worldAge));
         }
 

@@ -44,10 +44,18 @@ public final class CombatTracker {
     private boolean hasLastAim;
     private int aimSnapStreak;
 
-    /** Records an attack at {@code now}; interval statistics update automatically. */
+    /**
+     * Records an attack at {@code now}; interval statistics update automatically.
+     * Out-of-order observations (now before the last recorded attack) are
+     * ignored entirely: a fabricated zero interval would drag the mean down
+     * and could hand the regularity gate a metric it did not earn.
+     */
     public synchronized void recordAttack(long now) {
+        if (lastAttackAt > 0L && now < lastAttackAt) {
+            return; // stale/reordered observation: no interval, no rate point, no baseline rewind
+        }
         if (lastAttackAt > 0L) {
-            double interval = Math.max(0.0D, now - lastAttackAt);
+            double interval = now - lastAttackAt;
             intervalRing[intervalIndex] = interval;
             intervalIndex = (intervalIndex + 1) % INTERVAL_WINDOW;
             if (intervalCount < INTERVAL_WINDOW) {
@@ -70,9 +78,10 @@ public final class CombatTracker {
     }
 
     /**
-     * Coefficient of variation (stddev / mean) of attack intervals. Humans
-     * typing at a steady cadence still land above ~0.2; sub-0.10 values over a
-     * full window indicate software timing. NaN when empty.
+     * Coefficient of variation (stddev / mean) of attack intervals.
+     * Debug telemetry ONLY: the reference human-CV figures circulating in
+     * anti-cheat circles are unvalidated priors, and this value never gates a
+     * verdict. NaN when empty.
      */
     public synchronized double intervalCv() {
         double mean = intervalMean();

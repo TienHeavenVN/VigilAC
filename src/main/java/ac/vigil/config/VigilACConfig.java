@@ -127,7 +127,7 @@ public final class VigilACConfig {
     public int killAuraMinTargets() { return getInt("checks.kill-aura.min-targets", 3); }
     public double killAuraVlPerTrigger() { return getDouble("checks.kill-aura.vl-per-trigger", 1.0D); }
 
-    public double autoClickerCpsCap() { return getDouble("checks.auto-clicker.cps-cap", 20.5D); }
+    public double autoClickerCpsCap() { return getDouble("checks.auto-clicker.cps-cap", 25.0D); }
     public int autoClickerMinSamples() { return getInt("checks.auto-clicker.min-samples", 10); }
     public double autoClickerRoboticMeanMax() { return getDouble("checks.auto-clicker.robotic-mean-max", 150.0D); }
     public double autoClickerRoboticStddevMax() { return getDouble("checks.auto-clicker.robotic-stddev-max", 12.0D); }
