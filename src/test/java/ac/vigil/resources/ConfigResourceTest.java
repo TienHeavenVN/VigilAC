@@ -117,6 +117,22 @@ class ConfigResourceTest {
         assertEquals(Boolean.FALSE, llm.get("enabled"), "LLM egress must default to false");
         assertEquals(Boolean.TRUE, llm.get("redact-identifiers"), "LLM redaction must default to true");
 
+        // Capture block: disabled by default, declared-but-fail-safe (packaging-level contract).
+        Map<String, Object> capture = castMap(root.get("capture"));
+        assertNotNull(capture, "capture section is required (defaults must ship in config.yml)");
+        assertEquals(Boolean.FALSE, capture.get("enabled"), "capture.enabled must default to false");
+        assertEquals("", capture.get("scenario"), "capture.scenario must default to empty (never guessed)");
+        assertEquals("", capture.get("label"), "capture.label must default to empty (owner must attest)");
+        assertEquals("", capture.get("label-source"), "capture.label-source must default to empty");
+        assertEquals(-1.0D, ((Number) capture.get("label-confidence")).doubleValue(), "label-confidence must default to -1 (unset)");
+        assertEquals("", capture.get("pseudonym-key"), "capture.pseudonym-key must default to empty (capture stays off)");
+        assertEquals("UNKNOWN", capture.get("input-category"), "input-category must default to UNKNOWN");
+        assertEquals(Boolean.TRUE, capture.get("notify-on-join"), "notify-on-join should default to true (informed consent)");
+        for (String key : List.of("client-category", "pseudonym-rotation-hours", "interval-seconds",
+                "buffer-capacity", "max-total-bytes", "retention-days", "provenance-note")) {
+            assertTrue(capture.containsKey(key), "capture." + key + " is required by the code");
+        }
+
         assertEquals(Boolean.FALSE, root.get("debug"));
         assertEquals("vigilac.exempt", root.get("exempt-permission"));
     }

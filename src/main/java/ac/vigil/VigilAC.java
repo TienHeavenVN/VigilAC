@@ -3,6 +3,7 @@ package ac.vigil;
 import java.io.File;
 import ac.vigil.ai.AiConfig;
 import ac.vigil.ai.AiServices;
+import ac.vigil.capture.CaptureService;
 import ac.vigil.ai.BukkitConfigSource;
 import ac.vigil.alert.AlertManager;
 import ac.vigil.check.CheckManager;
@@ -63,6 +64,7 @@ public final class VigilAC extends JavaPlugin {
     private PacketEventsHook.Handle packetEventsHandle;
     private AttackAttemptDispatcher attackAttemptDispatcher;
     private AiServices aiServices;
+    private CaptureService captureService;
 
     @Override
     public void onEnable() {
@@ -91,6 +93,11 @@ public final class VigilAC extends JavaPlugin {
         this.pipeline = new ViolationPipeline(this::getVigilacConfig, exemptionManager, violationManager, alertManager);
 
         getServer().getPluginManager().registerEvents(new PlayerJoinQuitListener(playerDataManager, exemptionManager), this);
+        // Consent capture consent/session lifecycle is wired unconditionally; it no-ops when disabled.
+        java.util.function.Supplier<String> mcVersionSupplier = () -> getServer().getBukkitVersion();
+        this.captureService = new CaptureService(getLogger(), new ac.vigil.ai.BukkitConfigSource(getConfig()),
+                playerDataManager, () -> getServer().getTPS()[0], System::currentTimeMillis, mcVersionSupplier);
+        getServer().getPluginManager().registerEvents(new ac.vigil.listener.CaptureConsentListener(captureService), this);
         getServer().getPluginManager().registerEvents(
                 new PlayerMoveListener(this::getVigilacConfig, playerDataManager, checkManager, pipeline, exemptionManager), this);
         getServer().getPluginManager().registerEvents(
@@ -130,6 +137,10 @@ public final class VigilAC extends JavaPlugin {
         int aiIntervalTicks = aiConfig.inferenceIntervalSeconds() * 20;
         getServer().getScheduler().runTaskTimer(this, this::aiScanTick, 20L, aiIntervalTicks);
 
+        this.captureService.start(getDataFolder().toPath());
+        int captureIntervalTicks = this.captureService.config().intervalSeconds() * 20;
+        getServer().getScheduler().runTaskTimer(this, this::captureTick, 20L, Math.max(20, captureIntervalTicks));
+
         // VL decay + storage flush ride the same 1s timer.
         getServer().getScheduler().runTaskTimer(this, this::maintenanceTick, 20L, 20L);
 
@@ -139,25 +150,30 @@ public final class VigilAC extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // 0) Stop the AI module first: interrupt inference workers and discard pending jobs
+        // 0) Stop the capture first: flush and close the corpus writer before anything else goes down.
+        if (captureService != null) {
+            captureService.stop();
+            captureService = null;
+        }
+        // 1) Stop the AI module next: interrupt inference workers and discard pending jobs
         //    before any other subsystem shuts down.
         if (aiServices != null) {
             aiServices.stop();
             aiServices = null;
         }
-        // 1) Stop the decay/flush scheduler first so a queued maintenanceTick can
+        // 2) Stop the decay/flush scheduler so a queued maintenanceTick can
         //    never enqueue a record into a storage instance that is closing.
         if (getServer().getScheduler() != null) {
             getServer().getScheduler().cancelTasks(this);
         }
-        // 2) Unregister the packetevents listener so a /reload never leaves
+        // 3) Unregister the packetevents listener so a /reload never leaves
         //    stale listeners double-counting packet rates (which would feed the
         //    raw timer-rate input with N× traffic).
         if (packetEventsHandle != null) {
             packetEventsHandle.unregister();
             packetEventsHandle = null;
         }
-        // 3) Flush and close violation storage (bounded wait).
+        // 4) Flush and close violation storage (bounded wait).
         if (databaseManager != null) {
             databaseManager.close();
             databaseManager = null;
@@ -262,6 +278,19 @@ public final class VigilAC extends JavaPlugin {
         return getVigilacConfig().checkSettings(checkName);
     }
 
+    private void captureTick() {
+        CaptureService services = captureService;
+        if (services == null) {
+            return;
+        }
+        try {
+            services.tick();
+        } catch (RuntimeException t) {
+            // Capture must never take the main thread down with it.
+            getLogger().warning("[capture] capture tick failed: " + t);
+        }
+    }
+
     private void aiScanTick() {
         AiServices services = aiServices;
         if (services == null) {
@@ -298,6 +327,11 @@ public final class VigilAC extends JavaPlugin {
     /** AI-assist module. May be null during disable; always non-null while enabled. */
     public AiServices getAiServices() {
         return aiServices;
+    }
+
+    /** Consent-based capture module. May be null during disable; always non-null while enabled. */
+    public CaptureService getCaptureService() {
+        return captureService;
     }
 
     public CheckManager getCheckManager() {

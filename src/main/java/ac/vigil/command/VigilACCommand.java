@@ -14,6 +14,8 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ac.vigil.VigilAC;
 import ac.vigil.ai.AiServices;
+import ac.vigil.capture.CaptureService;
+import ac.vigil.capture.CaptureStatus;
 import ac.vigil.ai.assistant.AdminAssistant;
 import ac.vigil.ai.evidence.AiAssessment;
 import ac.vigil.ai.report.PlayerProfile;
@@ -30,7 +32,7 @@ import ac.vigil.util.Text;
 public final class VigilACCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS =
-            List.of("info", "alerts", "check", "violations", "debug", "reload", "exempt", "monitor", "ai", "help");
+            List.of("info", "alerts", "check", "violations", "debug", "reload", "exempt", "monitor", "ai", "capture", "help");
 
     private final VigilAC plugin;
 
@@ -59,6 +61,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             case "exempt" -> exempt(sender, args);
             case "monitor" -> monitor(sender, args);
             case "ai" -> ai(sender, args);
+            case "capture" -> capture(sender, args);
             default -> sender.sendMessage(Text.colorize("&cUnknown subcommand. Use &e/vigilac help&c."));
         }
         return true;
@@ -75,6 +78,7 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("vigilac.exempt")) sender.sendMessage(Text.colorize("&e/vigilac exempt <player> [check|*] &7— toggle check exemptions"));
         if (sender.hasPermission("vigilac.monitor")) sender.sendMessage(Text.colorize("&e/vigilac monitor <player> &7— continuous monitoring state + per-check detection status"));
         if (sender.hasPermission("vigilac.ai")) sender.sendMessage(Text.colorize("&e/vigilac ai <player|status|assistant|ask> &7— AI-assist report / module status (advisory; never punishes)"));
+        if (sender.hasPermission("vigilac.capture")) sender.sendMessage(Text.colorize("&e/vigilac capture <consent|revoke|status> &7— opt in/out of feature-only research telemetry, or show capture status"));
     }
 
     private void info(CommandSender sender) {
@@ -493,6 +497,93 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    /**
+     * /vigilac capture — consent-based feature-only research capture.
+     * Players opt in with consent / out with revoke; admins (vigilac.capture.admin) can
+     * purge old files or delete everything. Capture is disabled by default and inert
+     * unless fully declared by the server owner; detection firing never labels a row.
+     */
+    private void capture(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("vigilac.capture")) {
+            noPerm(sender);
+            return;
+        }
+        CaptureService service = plugin.getCaptureService();
+        if (service == null) {
+            sender.sendMessage(Text.colorize("&eCapture module is not initialised (plugin reloading?)."));
+            return;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(Text.colorize("&cUsage: /vigilac capture <consent|revoke|status|purge-old|delete-all>"));
+            return;
+        }
+        String sub = args[1].toLowerCase(Locale.ROOT);
+        switch (sub) {
+            case "consent" -> captureConsent(sender, service, true);
+            case "revoke" -> captureConsent(sender, service, false);
+            case "status" -> captureStatus(sender, service);
+            case "purge-old" -> capturePurgeOld(sender, service);
+            case "delete-all" -> captureDeleteAll(sender, args, service);
+            default -> sender.sendMessage(Text.colorize("&cUsage: /vigilac capture <consent|revoke|status|purge-old|delete-all>"));
+        }
+    }
+
+    private void captureConsent(CommandSender sender, CaptureService service, boolean grant) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.colorize("&cOnly players can grant/revoke capture consent."));
+            return;
+        }
+        if (grant) {
+            if (service.consentGrant(player.getUniqueId())) {
+                sender.sendMessage(Text.colorize("&7[VigilAC] Capture &aconsent recorded&7. Scenario: &e" + service.config().scenario()
+                        + "&7. Features only — never your name, UUID, chat, inventory or IP. &e/vigilac capture revoke&7 to change your mind."));
+            } else {
+                sender.sendMessage(Text.colorize("&cCapture is not enabled on this server right now."));
+            }
+        } else {
+            if (service.consentRevoke(player.getUniqueId())) {
+                sender.sendMessage(Text.colorize("&7[VigilAC] Capture &crevoked&7. You will not be recorded. Rows already written"));
+                sender.sendMessage(Text.colorize("&7  are unlinkable by design (HMAC pseudonyms) and follow the retention window."));
+            } else {
+                sender.sendMessage(Text.colorize("&cCapture is not enabled on this server right now."));
+            }
+        }
+    }
+
+    private void captureStatus(CommandSender sender, CaptureService service) {
+        CaptureStatus status = service.status();
+        sender.sendMessage(Text.colorize("&6Capture module status"));
+        for (String line : status.lines()) {
+            sender.sendMessage(Text.colorize("&7  " + line));
+        }
+        if (!sender.hasPermission("vigilac.capture.admin")) {
+            sender.sendMessage(Text.colorize("&7  (admin counters only with vigilac.capture.admin)"));
+        }
+    }
+
+    private void capturePurgeOld(CommandSender sender, CaptureService service) {
+        if (!sender.hasPermission("vigilac.capture.admin")) {
+            noPerm(sender);
+            return;
+        }
+        int purged = service.purgeOldFiles();
+        sender.sendMessage(Text.colorize("&7[VigilAC] Purged &e" + purged + "&7 corpus file(s) older than the retention window."));
+    }
+
+    private void captureDeleteAll(CommandSender sender, String[] args, CaptureService service) {
+        if (!sender.hasPermission("vigilac.capture.admin")) {
+            noPerm(sender);
+            return;
+        }
+        if (args.length < 3 || !args[2].equalsIgnoreCase("confirm")) {
+            sender.sendMessage(Text.colorize("&eThis deletes the ENTIRE capture corpus and the consent store on this server."));
+            sender.sendMessage(Text.colorize("&7Type &e/vigilac capture delete-all confirm&7 to proceed. This cannot be undone."));
+            return;
+        }
+        int deleted = service.deleteAll();
+        sender.sendMessage(Text.colorize("&7[VigilAC] Deleted &e" + deleted + "&7 corpus file(s) and cleared the consent store."));
+    }
+
     private Player targetPlayer(CommandSender sender, String name) {
         Player target = Bukkit.getPlayerExact(name);
         if (target == null) {
@@ -551,6 +642,17 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             return filter(SUBCOMMANDS, args[0]);
         }
         String sub = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2 && sub.equals("capture")) {
+            List<String> options = new ArrayList<>(List.of("consent", "revoke", "status"));
+            if (sender.hasPermission("vigilac.capture.admin")) {
+                options.add("purge-old");
+                options.add("delete-all");
+            }
+            return filter(options, args[1]);
+        }
+        if (args.length == 3 && sub.equals("capture") && args[1].equalsIgnoreCase("delete-all")) {
+            return filter(List.of("confirm"), args[2]);
+        }
         if (args.length == 2 && (sub.equals("check") || sub.equals("violations") || sub.equals("debug") || sub.equals("exempt") || sub.equals("monitor") || sub.equals("ai"))) {
             if (sub.equals("ai")) {
                 List<String> options = new ArrayList<>(List.of("status", "assistant", "ask"));

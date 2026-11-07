@@ -284,6 +284,45 @@ ai:
       # Redact the target's name, UUIDs and IPs from any text sent to the LLM. Strongly recommended.
       redact-identifiers: true
 
+# Consent-based research capture of feature-only gameplay telemetry (Stage 4).
+# DISABLED BY DEFAULT and fails safe: when disabled, or when any required
+# declaration below is missing, the capture writes NOTHING and says why in the
+# log and /vigilac capture status. Nothing is ever uploaded anywhere.
+# Rows contain only the 22-feature schema — never a username, UUID, IP, chat
+# message or inventory. Players are consented per-session via /vigilac capture consent.
+capture:
+  # Master switch. Keep false unless you run a consented research program.
+  enabled: false
+  # What this capture contains, per the owner. Required when enabled.
+  # e.g. 'lab-autoclicker-20cps' (cheat lab) or 'ranked-legit-farm' (curated legitimate).
+  scenario: ''
+  # Owner-attested ground truth for EVERY row this capture writes. Required.
+  # LEGITIMATE | SUSPICIOUS | CHEAT_VERIFIED. A detection firing never sets this;
+  # CHEAT_VERIFIED additionally requires label-source CONTROLLED_LAB|MODERATOR_REVIEW and confidence >= 0.8.
+  label: ''
+  label-source: ''
+  label-confidence: -1.0
+  # Client tag for rows (free text <= 64 chars; e.g. VANILLA, LAB_CHEAT_AUTOCLICK). UNKNOWN when unknown.
+  client-category: 'UNKNOWN'
+  # MOUSE|KEYBOARD|MIXED|CONTROLLER|UNKNOWN — never inferred by the plugin.
+  input-category: 'UNKNOWN'
+  # Base64 HMAC-SHA256 key for pseudonymization (openssl rand -base64 32). Required when enabled.
+  # Pseudonyms rotate every pseudonym-rotation-hours; rotating makes old IDs unlinkable.
+  pseudonym-key: ''
+  pseudonym-rotation-hours: 24
+  # Capture cadence per consented tracked player, seconds.
+  interval-seconds: 10
+  # Bounded buffer between the scheduler and the writer thread (drop-newest + counter when full).
+  buffer-capacity: 1024
+  # Hard cap on the whole corpus directory (bytes). Capture halts and counts when exceeded.
+  max-total-bytes: 268435456
+  # Corpus day-files older than this are deleted at startup and via /vigilac capture purge-old.
+  retention-days: 90
+  # Show a one-line notice on join to players who have not consented yet.
+  notify-on-join: true
+  # Free-text provenance note attached to every row (kept short).
+  provenance-note: 'consent-capture/1'
+
 # Global debug output to players with the vigilac.debug permission (verbose).
 debug: false
 

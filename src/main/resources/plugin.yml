@@ -11,7 +11,7 @@ softdepend:
 commands:
   vigilac:
     description: VigilAC administration command
-    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|monitor|ai|help>
+    usage: /vigilac <info|alerts|check|violations|debug|reload|exempt|monitor|ai|capture|help>
     permission: vigilac.command
 permissions:
   vigilac.command:
@@ -43,4 +43,10 @@ permissions:
     default: op
   vigilac.ai:
     description: View AI-assist reports and module status (advisory; never triggers punishment)
+    default: op
+  vigilac.capture:
+    description: Consent/revoke your own capture participation and view capture status
+    default: true
+  vigilac.capture.admin:
+    description: Purge old capture corpus files or delete the whole corpus + consent store
     default: op
