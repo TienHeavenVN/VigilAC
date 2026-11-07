@@ -5,13 +5,25 @@ branch (`arena/a7154a72-vigilac`). No scope expansion, no unrelated detection fe
 no threshold weakening. All findings below are restated from the review tasking — this
 file records the remediation, it does not quote reviewer prose.
 
-**Status of this record.** The branch compiles and its tests pass only under CI's
-verification environment. Locally, `./gradlew clean check --no-build-cache --rerun-tasks`
-cannot run — there is no JDK/javac in the development sandbox (it fails immediately with
-`ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH`) and the
-Paper API cannot be fetched offline. This is recorded honestly: **no local build or test
-execution happened for this remediation.** Compile/test verification is delegated to the
-GitHub Actions CI run for the remediation commit. Phase 7 is **not** complete; REAL_CLIENT_VALIDATION remains BLOCKED (see `PHASE_7_BLOCKERS.md` §2). Nothing here is REAL_CLIENT_VERIFIED.
+**Status of this record.** Verification was CI-gated; no local build or test execution happened.
+Locally, `./gradlew clean check --no-build-cache --rerun-tasks` cannot run — there is no JDK/javac
+in the development sandbox (it fails immediately with `ERROR: JAVA_HOME is not set and no 'java'
+command could be found in your PATH`), JDK assets on GitHub release channels are not fetchable,
+`jdk4py`'s minimal runtime ships `java` without `jdk.compiler`, and the Paper API cannot be
+fetched. Recorded honestly:
+
+- Commit `3e309c0` (the remediation) **failed CI** at test-source compilation: one
+  `double` constant was passed where `BreakTimeModel.expectedMillis()` takes an `int`
+  (`BreakTimeModelHarvestTest`, mining-fatigue argument). Root-caused through the check-run
+  annotations API (job logs are not readable); fixed in commit `232e501`.
+- Commit `232e501` is **CI green**: run
+  <https://github.com/TienHeavenVN/VigilAC/actions/runs/42381906958> —
+  Build and test `success` (tests=280, skipped=0, failures=0, errors=0); the full Paper
+  compat matrix 1.21–26.3 `success`; the 26x artifact build `success`; runtime smoke tests
+  `success`; only the deliberately-manual Load test leg is skipped.
+
+Phase 7 is **not** complete; REAL_CLIENT_VALIDATION remains BLOCKED (see `PHASE_7_BLOCKERS.md`
+§2). Nothing here is REAL_CLIENT_VERIFIED.
 
 ---
 
@@ -72,9 +84,10 @@ the iron requirement of regular gold ore).
 `BreakTimeModelTest` keeps the formula-contract coverage on the new signature.
 
 ### Verification result
-- **CI-gated, not locally executed** (no JDK in this environment; see header). The full
-  `./gradlew clean check --no-build-cache --rerun-tasks` gate runs on GitHub Actions for the
-  remediation commit.
+- Compiled and tested only under CI (no local JDK; see header). First push `3e309c0` failed CI
+  at test-source compilation (the `double`/`int` mismatch above — the only defect found this
+  way); fixed in `232e501`, after which Build and test ran 280 tests with 0 failures/errors and
+  the full compat matrix is green (run 42381906958).
 - Numbers above were re-derived by hand from the vanilla formula for this document.
 
 ### Remaining limitations
@@ -149,8 +162,9 @@ produce). A successful hit is now unrepresentable as rejected evidence: pairing 
 resolution time or the attempt is INVALID/expired — never both.
 
 ### Verification result
-- **CI-gated, not locally executed** (no JDK in this environment; see header). Tests use
-  synthetic timestamps, so they do not depend on wall-clock sleeps or on machine load.
+- Compiled and tested only under CI (no local JDK; see header). Fixed by the same `232e501`;
+  green with 280 tests, 0 failures/errors (run 42381906958). Tests use synthetic timestamps,
+  so they do not depend on wall-clock sleeps or on machine load.
 - Non-blocking netty hand-off, bounded queue (256) and bounded drain (64/tick) are unchanged; the
   new damage-mark ring is O(1) amortized and bounded by 64 entries.
 
@@ -175,8 +189,10 @@ resolution time or the attempt is INVALID/expired — never both.
 
 ## Honesty statement
 
-- Verification of this remediation is **CI-gated**. No local build ran; local `javac` does not
-  exist in this environment and the Paper API cannot be fetched here.
+- Verification of this remediation is **CI-gated** (run 42381906958, green at `232e501`). No
+  local build ran; local `javac` does not exist in this environment and the Paper API cannot be
+  fetched here. The first push's CI failure was root-caused through annotations (job logs are
+  not readable), never through guesswork.
 - No real client was run. Nothing in this file or the diff is REAL_CLIENT_VERIFIED. As with the
   rest of Phase 7, real-client validation is BLOCKED pending a supported server and client.
 - No violation thresholds were weakened; no unknown mechanic was converted into conviction evidence.

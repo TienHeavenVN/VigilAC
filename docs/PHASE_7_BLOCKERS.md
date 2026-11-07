@@ -69,10 +69,12 @@ No Phase 7 document may claim any of the above.
 ## 5. Branch & push status
 
 - Work is confined to `arena/a7154a72-vigilac`. Phase 7 commits were pushed to
-  this branch under explicit user authorization (CI run verified green at
-  `2afe073`; see below). A subsequent independent-review remediation commit was
-  pushed the same way; its verification is CI-gated (no local JDK — see the
-  PHASE_7_INDEPENDENT_REVIEW.md header).
+  this branch under explicit user authorization (CI green at `2afe073`, run
+  42367924440). The independent-review remediation was pushed as `3e309c0`
+  (failed CI at test compilation; root-caused via annotations) and fixed in
+  `232e501` — **CI green**, run 42381906958 (Build and test: 280 tests,
+  0 failures; full compat matrix green). See the PHASE_7_INDEPENDENT_REVIEW.md
+  header for the verification record.
 - No PR is open for Phase 7; `main` is untouched. History has **not** been
   rewritten; no force-push, no `reset --hard`, no dropped commits.
 - The Arena session is bound to this branch. Phase 7 is **not** complete: the
