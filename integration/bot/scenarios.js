@@ -55,10 +55,17 @@ async function summonZombieNear(bot, api, offset, name) {
 // EntityDamageByEntityEvent: an attack only counts if it DEALS damage. A 20-HP
 // NoAI zombie dies in 2-4 swings, after which a 25-CPS barrage produces zero
 // events and combat VL reads 0 at RCON time no matter how mechanical the
-// clicking is. These targets are immortal on purpose: the combat checks stay
-// fed with real damage events for the full scenario. 1.20.5+ attribute NBT
-// uses id/base (lowercase) and Health is a float.
-const IMMORTAL_ZOMBIE = '{NoAI:1b,Health:10000f,Attributes:[{id:"minecraft:max_health",base:10000}]}';
+// clicking is. These targets are therefore made effectively immortal via the
+// `attribute` command + a `data merge` of current Health (a pure-NBT max_health
+// attribute inside /summon did NOT take effect on this 1.21.8 server — the
+// summon either failed or the attribute path did not apply; the command route
+// is verified live and its output is logged as evidence).
+async function summonImmortalZombie(api, name, offset) {
+  api.rcon(`execute at ${name} run summon minecraft:zombie ~${offset.x} ~ ~${offset.z} {NoAI:1b}`);
+  const attr = api.rcon(`execute at ${name} as @e[type=zombie,distance=..6] run attribute @s minecraft:max_health base set 10000`);
+  const merge = api.rcon(`execute at ${name} as @e[type=zombie,distance=..6] run data merge entity @s {Health:10000.0f}`);
+  api.result.evidence.push(`immortal setup: attribute=[${String(attr).trim().slice(0, 80)}] merge=[${String(merge).trim().slice(0, 80)}]`);
+}
 
 function attack(bot, entity) {
   bot._client.write('use_entity', { target: entity.id, mouse: 1, hand: 0 });
@@ -89,11 +96,16 @@ define('legit-stand', { kind: 'legit', description: 'stand still 5s', expect: []
 
 define('legit-sprint-jump', { kind: 'legit', description: 'sprint-jump forward with turns 6s', expect: [] }, async (bot, api) => {
   bot.setControlState('sprint', true);
+  // 1.21.6+ routes sprint through ServerboundPlayerInputPacket (the same packet
+  // used for sneak). mineflayer 4.39.0 still sends legacy entity_action for
+  // sprint, which 1.21.8 ignores (server reports sprint=false, cap = walk cap).
+  // Sent guarded: a serialization failure must not fail the scenario.
+  try { bot._client.write('player_input', { inputs: { sprint: true, shift: false } }); } catch (e) { bot.__inputErr = String(e); }
   // Empirical check of the Phase-3 open question: does the server see the bot as
   // sprinting? The server-side flag decides walk-vs-sprint cap selection in the
   // speed check. Logged as raw evidence either way.
   const spProbe = api.rcon(`data get entity ${api.result.username} Sprinting`);
-  api.result.evidence.push('Sprinting probe -> ' + String(spProbe).replace(/\n/g, ' ').slice(0, 140));
+  api.result.evidence.push('Sprinting probe -> ' + String(spProbe).replace(/\n/g, ' ').slice(0, 140) + (bot.__inputErr ? ' | player_input write error: ' + bot.__inputErr.slice(0, 120) : ' | player_input sent'));
   for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
     await bot.look(yaw, 0, true);
     bot.setControlState('jump', true);
@@ -173,12 +185,12 @@ define('legit-teleport', { kind: 'legit', description: 'server-side upward tp (g
 
 define('illegal-overspeed', { kind: 'illegal', description: '6.4 b/s horizontal walk (above 4.4 walk cap, under Paper revert threshold)', expect: ['speed'] }, async (bot, api) => {
   bot.physicsEnabled = false;
-  const end = Date.now() + 10000;
+  const end = Date.now() + 4000;
   while (Date.now() < end) {
     forgeMove(bot, 0.32, 0, 0, true);
     await api.sleep(50);
   }
-  api.result.evidence.push('moved +0.32 blocks/packet at 20 Hz (~6.4 b/s) for 10s');
+  api.result.evidence.push('moved +0.32 blocks/packet at 20 Hz (~6.4 b/s) for 4s (server typically reverts the forge after ~1.5s; VL readout happens 1.5s after scenario end, inside the 5s decay-delay window)');
 });
 
 
@@ -259,15 +271,14 @@ define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tole
 
 define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS on a single immortal victim (HP effectively infinite; kill-aura isolated)', expect: ['auto-clicker'] }, async (bot, api) => {
   const name = api.result.username;
-  api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ ${IMMORTAL_ZOMBIE}`);
-  await api.sleep(400);
-    await api.sleep(400);
+  await summonImmortalZombie(api, name, { x: 2, z: 0 });
+  await api.sleep(800);
   const end = Date.now() + 12000;
   let attacks = 0, resummons = 0;
   while (Date.now() < end) {
     const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
     if (zombies.length === 0) {
-      api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ ${IMMORTAL_ZOMBIE}`);
+      await summonImmortalZombie(api, name, { x: 2, z: 0 });
       resummons++;
       await api.sleep(600);
       continue;
@@ -283,7 +294,7 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
 define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinct immortal zombies inside 1s window', expect: ['kill-aura'] }, async (bot, api) => {
   const name = api.result.username;
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }, { x: 0, z: 2 }, { x: 0, z: -2 }]) {
-    api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z} ${IMMORTAL_ZOMBIE}`);
+    await summonImmortalZombie(api, name, off);
   }
     await api.sleep(1500);
   const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
@@ -375,8 +386,9 @@ define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20m
 });
 
 define('illegal-aimassist', { kind: 'illegal', description: 'six 180-degree snaps landing on two immortal zombies', expect: ['aim-assist'] }, async (bot, api) => {
+  const name = api.result.username;
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }]) {
-    api.rcon(`execute at ${api.result.username} run summon minecraft:zombie ~${off.x} ~ ~${off.z} ${IMMORTAL_ZOMBIE}`);
+    await summonImmortalZombie(api, name, off);
   }
     await api.sleep(1500);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 2);
