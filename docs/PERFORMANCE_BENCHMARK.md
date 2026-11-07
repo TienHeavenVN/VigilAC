@@ -49,3 +49,19 @@ The Phase 6 detection engine introduces no measurable regression at 10/25/50 con
 bots under the CI harness; stability (failed_bots=0, clean disable, DB present) holds at
 all three scales. CI_VERIFIED for the event-driven path; the packetevents hot path
 remains CI-unverifiable (see [COMPATIBILITY_MATRIX.md](COMPATIBILITY_MATRIX.md)).
+
+## Final-head re-verification (2026-11-07, heads d46e1a3 / 6518bb8 / c5f78db)
+
+The three load legs were re-run against the FINAL code head (includes `jesus`/`step`,
+which touch the per-move path with two O(1) counters). Reading:
+
+| Leg | Run | TPS (1m) dip | TPS (5m) | RSS peak | failed_bots | stop→exit |
+|---|---|---|---|---|---|---|
+| load=10 | `42359070974` | none (20.0) | 20.0 | ~1.66 GB | 0 | 2539 ms |
+| load=25 | `42359072124` | 19.06 | 19.6–19.9 | ~1.74 GB | 0 | 3560 ms |
+| load=50 | `42359074255` | 14.2–15.4 during the 10 s peak; 5m average ≥ 18.5 | 19.5–20.0 | ~1.69 GB | 0 | 2541 ms |
+
+The 50-bot dip matches the Phase 5 and pre-jesus/step (`f7bde96`) signatures on the
+same shared CI runners — within run-to-run noise. No detectable regression from the
+two new checks (they add ~2 integer increments and two comparisons per move event).
+The packetevents caveat above still applies to these runs.
