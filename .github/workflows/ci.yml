@@ -1,0 +1,708 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      load_bots:
+        description: 'Concurrent bots for the load test'
+        type: choice
+        options: ['10', '25', '50', '100']
+        default: '25'
+      load_duration:
+        description: 'Load test duration (seconds)'
+        default: '45'
+
+permissions:
+  checks: write
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile main sources
+        run: |
+          set +e
+          ./gradlew compileJava --no-daemon > compile.log 2>&1
+          code=$?
+          tr '\r' '\n' < compile.log | tail -n 40
+          if [ $code -ne 0 ]; then
+            python3 - <<'PYEOF'
+          import html
+          text = open('compile.log', encoding='utf8', errors='replace').read()
+          lines = [l for l in text.splitlines() if l.strip()][-12:]
+          blob = ' | '.join(lines)
+          blob = html.unescape(blob).replace('%', '%25').replace('\r', ' ').replace('\n', ' ')
+          print('::error title=GradleBuild::' + blob[:1800])
+          PYEOF
+            exit $code
+          fi
+
+      - name: Compile test sources
+        run: ./gradlew compileTestJava --no-daemon --stacktrace
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Publish unit test results
+        if: always()
+        uses: dorny/test-reporter@v3
+        with:
+          name: Unit tests
+          path: build/test-results/test/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Test failure details (annotations)
+        if: failure()
+        run: |
+          python3 - <<'PYEOF'
+          import glob, re, html, os
+          found = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              text = open(f, encoding='utf8', errors='replace').read()
+              for m in re.finditer(r'<(failure|error)[^>]*message="([^"]*)"', text):
+                  found += 1
+                  msg = html.unescape(m.group(2)).replace('\\n', ' ').replace('\\r', ' ')[:600]
+                  case = os.path.basename(f)[:-4]
+                  print(f'::error title={case}::{msg}')
+          if not found:
+              print('::error title=NoTestFailures::Test step failed but no failure tags were found in the XML reports')
+          PYEOF
+
+      - name: Test summary (annotations)
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          import glob, re
+          total = failed = errors = skipped = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              head = open(f, encoding='utf8', errors='replace').read(400)
+              m = re.search(r'tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"', head)
+              if m:
+                  total += int(m.group(1)); skipped += int(m.group(2)); failed += int(m.group(3)); errors += int(m.group(4))
+          print(f'::notice title=TestSummary::tests={total} skipped={skipped} failures={failed} errors={errors}')
+          PYEOF
+
+      - name: Build shadow JAR
+        run: ./gradlew shadowJar --no-daemon --stacktrace
+
+      - name: SHA-256 checksum
+        run: sha256sum build/libs/VigilAC.jar | tee build/libs/VigilAC.jar.sha256
+
+      - name: Upload VigilAC.jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: VigilAC
+          path: |
+            build/libs/VigilAC.jar
+            build/libs/VigilAC.jar.sha256
+          if-no-files-found: error
+
+  build-26x:
+    name: Build VigilAC-26x artifact (JDK 25)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Gradle 8.14.3 cannot run on Java 25 (Java 25 requires Gradle 9.1+),
+      # so the daemon runs on JDK 21; the compile toolchain comes from JDK 25.
+      - name: Set up JDK 21 (Temurin, Gradle daemon JVM)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Record JDK 21 home (setup-java v4 exposes no .outputs.path)
+        run: echo "JDK21_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 25 (Temurin, compile toolchain)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Record JDK 25 home
+        run: echo "JDK25_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve paper-api 26.1.2.build.74-stable (existence probe)
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/26.1.2.build.74-stable/paper-api-26.1.2.build.74-stable.pom")
+          echo "paper-api 26.1.2.build.74-stable pom HTTP $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:26.1.2.build.74-stable is not resolvable on repo.papermc.io (HTTP $CODE)"
+            exit 1
+          fi
+
+      - name: Compile against paper-api 26.1.2.build.74-stable (release 25; lowest supported 26.x API)
+        run: |
+          set +e
+          ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.1.2.build.74-stable -PjavaRelease=25 -PartifactName=VigilAC-26x -Dorg.gradle.java.home=$JDK21_HOME -Porg.gradle.java.installations.paths=$JDK25_HOME,$JDK21_HOME > compile.log 2>&1
+          code=$?
+          tr '\r' '\n' < compile.log | tail -n 40
+          if [ $code -ne 0 ]; then
+            tr '\r' '\n' < compile.log | tail -40 | while IFS= read -r line; do
+              [ -n "$line" ] && printf '::error title=Compile26tail::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-400)"
+            done
+            exit $code
+          fi
+
+      - name: Verify class file version (must be >= 69 for Java 25)
+        run: |
+          python3 - <<'PYEOF'
+          import struct
+          data = open('build/libs/VigilAC-26x.jar', 'rb').read()
+          # Find the central directory end to list class entries
+          import zipfile
+          versions = set()
+          own_versions = set()
+          with zipfile.ZipFile('build/libs/VigilAC-26x.jar') as zf:
+              for name in zf.namelist():
+                  if name.endswith('.class'):
+                      raw = zf.read(name)[6:8]
+                      v = struct.unpack('>H', raw)[0]
+                      versions.add(v)
+                      # VigilAC's own classes must be Java 25 (major 69); bundled
+                      # third-party classes (e.g. sqlite-jdbc, Java 8 bytecode) are
+                      # allowed their own targets — backwards classfile compat loads
+                      # them fine on Java 25.
+                      if name.startswith('ac/vigil/'):
+                          own_versions.add(v)
+          print('all class file versions found:', sorted(versions))
+          print('own (ac/vigil) class file versions:', sorted(own_versions))
+          if not own_versions:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains no ac/vigil classes')
+              raise SystemExit(1)
+          if min(own_versions) < 69:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains VigilAC class files older than 69 (Java 25) — the 26.x artifact was built with the wrong toolchain/release')
+              raise SystemExit(1)
+          if min(versions) < 52:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains class files older than Java 8 (52) — unexpected bundled dependency')
+              raise SystemExit(1)
+          PYEOF
+
+      - name: SHA-256 checksum
+        run: sha256sum build/libs/VigilAC-26x.jar | tee build/libs/VigilAC-26x.jar.sha256
+
+      - name: Upload VigilAC-26x.jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: VigilAC-26x
+          path: |
+            build/libs/VigilAC-26x.jar
+            build/libs/VigilAC-26x.jar.sha256
+          if-no-files-found: error
+
+  compat:
+    name: Compat ${{ matrix.paper }} (JDK ${{ matrix.jdk }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { paper: '1.21',  api: '1.21-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.1',  api: '1.21.1-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.3',  api: '1.21.3-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.4',  api: '1.21.4-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.5',  api: '1.21.5-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.6',  api: '1.21.6-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.7',  api: '1.21.7-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.8',  api: '1.21.8-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.9',  api: '1.21.9-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.10', api: '1.21.10-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.11', api: '1.21.11-R0.1-SNAPSHOT', jdk: '21', javaRelease: '21' }
+          # 26.x targets: exact stable paper-api coordinates (the -R0.1-SNAPSHOT
+          # naming does not exist for 26.x; Paper publishes <version>.build.<n>-stable).
+          # JDK 25 + --release 25 required.
+          - { paper: '26.1.2',  api: '26.1.2.build.74-stable', jdk: '25', javaRelease: '25' }
+          - { paper: '26.2',    api: '26.2.build.135-stable', jdk: '25', javaRelease: '25' }
+          - { paper: '26.3',    api: '26.3.build.244-stable', jdk: '25', javaRelease: '25' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Gradle 8.14.3 cannot run on Java 25 (Java 25 requires Gradle 9.1+),
+      # so the Gradle daemon always runs on JDK 21. The 26.x compile toolchain
+      # comes from JDK 25 (explicit installation path below).
+      - name: Set up JDK 21 (Temurin, Gradle daemon JVM)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Record JDK 21 home (setup-java v4 exposes no .outputs.path)
+        run: echo "JDK21_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 25 (Temurin, 26.x toolchain / server JVM)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Record JDK 25 home
+        run: echo "JDK25_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      # Servers of the 1.21.8 smoke leg must run on 21; 26.x smoke servers on 25.
+      - name: Pin server JVM to this leg's matrix JDK
+        if: matrix.jdk == '21'
+        run: echo "JAVA_HOME=$JDK21_HOME" >> "$GITHUB_ENV"
+
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve paper-api ${{ matrix.api }} (existence probe)
+        run: |
+          if printf '%s' "${{ matrix.api }}" | grep -q -- '-SNAPSHOT'; then
+            URL="https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/${{ matrix.api }}/maven-metadata.xml"
+          else
+            URL="https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/${{ matrix.api }}/paper-api-${{ matrix.api }}.pom"
+          fi
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "paper-api ${{ matrix.api }} probe HTTP $CODE ($URL)"
+          if [ "$CODE" != "200" ]; then
+            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:${{ matrix.api }} is not resolvable on repo.papermc.io (HTTP $CODE)"
+            exit 1
+          fi
+
+      - name: Compile against paper-api ${{ matrix.paper }}
+        run: |
+          set +e
+          ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} -Dorg.gradle.java.home=$JDK21_HOME -Porg.gradle.java.installations.paths=$JDK25_HOME,$JDK21_HOME > compile.log 2>&1
+          code=$?
+          tr '\r' '\n' < compile.log | tail -n 40
+          if [ $code -ne 0 ]; then
+            grep -E 'error:|Could not|What went wrong|Execution failed|not resolvable|FAILED' compile.log | head -12 | while IFS= read -r line; do
+              printf '::error title=Compile::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-500)"
+            done
+            exit $code
+          fi
+
+      - name: Unit tests against paper-api ${{ matrix.paper }}
+        run: |
+          set +e
+          ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.api }} -PjavaRelease=${{ matrix.javaRelease }} -Dorg.gradle.java.home=$JDK21_HOME -Porg.gradle.java.installations.paths=$JDK25_HOME,$JDK21_HOME > test.log 2>&1
+          code=$?
+          tail -n 25 test.log
+          if [ $code -ne 0 ]; then
+            python3 - <<'PYEOF'
+          import glob, re, html, os
+          found = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              text = open(f, encoding='utf8', errors='replace').read()
+              for m in re.finditer(r'<(failure|error)[^>]*message="([^"]*)"', text):
+                  found += 1
+                  msg = html.unescape(m.group(2)).replace('\n', ' ').replace('\r', ' ')[:600]
+                  case = os.path.basename(f)[:-4]
+                  print(f'::error title={case}::{msg}')
+          if not found:
+              print('::error title=NoTestFailures::Test step failed but no failure tags were found in the XML reports')
+          PYEOF
+            exit $code
+          fi
+
+  version-inventory:
+    name: Authoritative version inventory (Mojang manifest + paper-api probes)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Mojang version_manifest_v2 and probe every 1.21.x and 26.x release
+        run: |
+          set -uo pipefail
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o version_manifest_v2.json "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json") || CODE="curl-failed"
+          echo "launchermeta HTTP $CODE"
+          head -c 300 version_manifest_v2.json; echo
+          if [ "$CODE" != "200" ]; then
+            echo "::error title=MojangManifest::could not fetch version_manifest_v2.json (HTTP $CODE) — the authoritative 1.21.x/26.x inventory cannot be established"
+            exit 1
+          fi
+          python3 - <<'PYEOF'
+          import json, re, subprocess
+          raw = open('version_manifest_v2.json', encoding='utf8', errors='replace').read()
+          try:
+              manifest = json.loads(raw)
+          except Exception as ex:
+              print(f'::error title=ManifestParse::not valid JSON: {ex}; head={raw[:200]}')
+              raise SystemExit(1)
+          print('::notice title=ManifestKeys::' + ','.join(list(manifest.keys())))
+          versions = manifest.get('versions', [])
+          releases = [v['id'] for v in versions if isinstance(v, dict) and v.get('type') == 'release' and 'id' in v]
+          print('::notice title=ManifestReleaseCount::' + str(len(releases)))
+          target = sorted({v for v in releases if re.fullmatch(r'1\.21(\.\d+)?', v) or re.fullmatch(r'26\.\d+(\.\d+)?', v)},
+                          key=lambda v: [int(p) for p in v.split('.')])
+          print('::notice title=Inventory::Mojang released 1.21.x/26.x versions: ' + ', '.join(target))
+          available, missing = [], []
+          for v in target:
+              url = f'https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/{v}-R0.1-SNAPSHOT/maven-metadata.xml'
+              code = subprocess.run(['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', url],
+                                    capture_output=True, text=True).stdout.strip()
+              print(f'::notice title=Probe-{v}::paper-api {v}-R0.1-SNAPSHOT maven-metadata HTTP {code}')
+              (available if code == '200' else missing).append(v)
+          print('::notice title=InventoryPaperApiAvailable::' + (', '.join(available) or 'none'))
+          print('::notice title=InventoryPaperApiMissing::' + (', '.join(missing) or 'none'))
+          with open('inventory.txt', 'w') as fh:
+              fh.write('mojang_releases=' + ','.join(target) + '\n')
+              fh.write('paper_api_available=' + ','.join(available) + '\n')
+              fh.write('paper_api_missing=' + ','.join(missing) + '\n')
+          PYEOF
+
+      - name: Dump paper-api maven-metadata (authoritative published artifact list)
+        run: |
+          set -uo pipefail
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o paper-api-metadata.xml "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/maven-metadata.xml") || CODE="curl-failed"
+          echo "paper-api maven-metadata HTTP $CODE"
+          python3 - <<'PYEOF'
+          import re
+          raw = open('paper-api-metadata.xml', encoding='utf8', errors='replace').read()
+          versions = re.findall(r'<version>([^<]+)</version>', raw)
+          print('::notice title=PaperApiListedCount::' + str(len(versions)))
+          legacy = [v for v in versions if re.fullmatch(r'1\.21(\.\d+)?-R0\.1-SNAPSHOT', v)]
+          print('::notice title=PaperApiListed-1.21.x::' + ', '.join(legacy))
+          for family in ('26.1.2', '26.2', '26.3', '26.1.1', '26.1'):
+              hits = [v for v in versions if v.startswith(family + '.') or v == family or v.startswith(family + '-')]
+              print(f'::notice title=PaperApiListed-{family}::count={len(hits)} latest={hits[-3:]}')
+          PYEOF
+
+      - name: Probe exact 26.x paper-api artifacts used by this workflow
+        run: |
+          set -uo pipefail
+          for V in 26.1.2.build.74-stable 26.2.build.135-stable 26.3.build.244-stable; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/$V/paper-api-$V.pom")
+            echo "paper-api $V pom HTTP $CODE"
+            if [ "$CODE" != "200" ]; then
+              echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:$V does not resolve (HTTP $CODE)"
+              exit 1
+            fi
+          done
+          # Known-unavailable coordinates (expected 404; printed loudly, never silently ignored)
+          for V in "26.1-R0.1-SNAPSHOT" "26.1.1-R0.1-SNAPSHOT" "26.1-R0.1" "26.1.1-R0.1"; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/$V/maven-metadata.xml")
+            echo "::notice title=Probe-KnownMissing::paper-api $V maven-metadata HTTP $CODE (expected 404 — no published artifact)"
+          done
+
+      - name: Probe Fill v3 for 26.x STABLE builds (server jar availability)
+        run: |
+          set -uo pipefail
+          for V in 26.1.2 26.2 26.3; do
+            CODE=$(curl -sS --retry 2 --retry-delay 1 -H "User-Agent: VigilAC-CI/1.0.0 (github.com/TienHeavenVN/VigilAC)" -w '%{http_code}' -o "fill-$V.json" "https://fill.papermc.io/v3/projects/paper/versions/$V/builds") || CODE="curl-failed"
+            echo "Fill v3 versions/$V/builds HTTP $CODE"
+            head -c 400 "fill-$V.json"; echo
+            python3 - "$V" <<'PYEOF'
+          import json, sys
+          v = sys.argv[1]
+          try:
+              builds = json.load(open(f'fill-{v}.json'))
+          except Exception as ex:
+              print(f'::notice title=FillProbe-{v}::unparseable body ({ex})')
+              raise SystemExit(0)
+          stable = [b for b in builds if b.get('channel') == 'STABLE'] if isinstance(builds, list) else []
+          print(f'::notice title=FillProbe-{v}::builds={len(builds) if isinstance(builds, list) else "n/a"} stable={len(stable)}')
+          if stable:
+              b = stable[0]
+              url = (b.get('downloads', {}).get('server:default', {}) or {})
+              print(f'::notice title=FillProbe-{v}::latest_stable={b.get("id")} name={url.get("name")} sha256_len={len((url.get("checksums") or {}).get("sha256", ""))}')
+          PYEOF
+          done
+
+      - name: Upload inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-inventory
+          path: |
+            inventory.txt
+            paper-api-metadata.xml
+            fill-26.1.2.json
+            fill-26.2.json
+          if-no-files-found: warn
+
+  live-bot:
+    name: Live bot harness (Paper 1.21.8)
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        packetevents: ['0', '1']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build plugin
+        run: ./gradlew shadowJar --no-daemon -q
+
+      - name: Run live test harness
+        run: ./integration/run.sh
+        env:
+          PACKETEVENTS: ${{ matrix.packetevents }}
+          RUN_LATENCY_PASS: '1'
+
+      - name: Upload live test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-bot-results-pe${{ matrix.packetevents }}
+          path: |
+            integration/out/**
+            integration/server/server.log
+          if-no-files-found: warn
+
+  integration:
+    name: Runtime smoke test (Paper ${{ matrix.paper }})
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 1.21.x leg builds the default artifact; 26.x legs build VigilAC-26x
+          # once against the lowest supported 26.x API (26.1.2) and boot it on
+          # every supported 26.x runtime — empirical cross-minor binary-compat check.
+          - { paper: '1.21.8', jdk: '21', buildApi: '1.21.8-R0.1-SNAPSHOT',   javaRelease: '21', artifactName: 'VigilAC' }
+          - { paper: '26.1.2', jdk: '25', buildApi: '26.1.2.build.74-stable', javaRelease: '25', artifactName: 'VigilAC-26x' }
+          - { paper: '26.2',   jdk: '25', buildApi: '26.1.2.build.74-stable', javaRelease: '25', artifactName: 'VigilAC-26x' }
+          - { paper: '26.3',   jdk: '25', buildApi: '26.1.2.build.74-stable', javaRelease: '25', artifactName: 'VigilAC-26x' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Gradle 8.14.3 cannot run on Java 25 (Java 25 requires Gradle 9.1+),
+      # so the Gradle daemon always runs on JDK 21. The 26.x compile toolchain
+      # comes from JDK 25 (explicit installation path below).
+      - name: Set up JDK 21 (Temurin, Gradle daemon JVM)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Record JDK 21 home (setup-java v4 exposes no .outputs.path)
+        run: echo "JDK21_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 25 (Temurin, 26.x toolchain / server JVM)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Record JDK 25 home
+        run: echo "JDK25_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      # Servers of the 1.21.8 smoke leg must run on 21; 26.x smoke servers on 25.
+      - name: Pin server JVM to this leg's matrix JDK
+        if: matrix.jdk == '21'
+        run: echo "JAVA_HOME=$JDK21_HOME" >> "$GITHUB_ENV"
+
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build plugin (${{ matrix.artifactName }})
+        run: ./gradlew shadowJar --no-daemon -q -PpaperApiVersion=${{ matrix.buildApi }} -PjavaRelease=${{ matrix.javaRelease }} -PartifactName=${{ matrix.artifactName }} -Dorg.gradle.java.home=$JDK21_HOME -Porg.gradle.java.installations.paths=$JDK25_HOME,$JDK21_HOME
+
+      - name: Download Paper ${{ matrix.paper }} (Fill v3 API, SHA-256 verified)
+        env:
+          PAPER_VERSION: ${{ matrix.paper }}
+        run: |
+          set -uo pipefail
+          API="https://fill.papermc.io/v3/projects/paper"
+          UA="VigilAC-CI/1.0.0 (github.com/TienHeavenVN/VigilAC)"
+          mkdir -p server/plugins
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o builds.json "$API/versions/$PAPER_VERSION/builds") || CODE="curl-failed"
+          echo "Fill v3 builds endpoint HTTP $CODE (version $PAPER_VERSION)"
+          head -c 400 builds.json 2>/dev/null; echo
+          BUILDID=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].id // "")' builds.json 2>/dev/null)
+          NAME=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].name // "")' builds.json 2>/dev/null)
+          URL=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].url // "")' builds.json 2>/dev/null)
+          SHA=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].checksums.sha256 // "")' builds.json 2>/dev/null)
+          if [ -z "$BUILDID" ] || [ -z "$URL" ] || [ -z "$SHA" ]; then
+            BODY=$(head -c 300 builds.json 2>/dev/null | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g')
+            echo "::error title=PaperMeta::HTTP $CODE id='$BUILDID' name='$NAME' body: $BODY"
+            exit 1
+          fi
+          echo "Latest Paper $PAPER_VERSION STABLE build: $BUILDID ($NAME)"
+          echo "URL: $URL"
+          CODE2=$(curl -sSL --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o server/paper.jar "$URL") || CODE2="curl-failed"
+          echo "download HTTP $CODE2"
+          ls -la server/paper.jar
+          echo "$SHA  server/paper.jar" | sha256sum -c - || { echo "::error title=PaperJar::SHA-256 mismatch for the Paper download (HTTP $CODE2)"; exit 1; }
+
+      - name: Prepare server directory and properties
+        run: |
+          cp build/libs/${{ matrix.artifactName }}.jar server/plugins/VigilAC.jar
+          printf 'eula=true\n' > server/eula.txt
+          {
+            echo 'online-mode=false'
+            echo 'sync-chunk-writes=false'
+            echo 'enable-rcon=true'
+            echo 'rcon.password=vigilac-ci'
+            echo 'rcon.port=25575'
+            echo 'motd=VigilAC CI'
+            echo 'view-distance=4'
+            echo 'simulation-distance=4'
+            echo 'spawn-protection=0'
+            echo 'difficulty=normal'
+            echo 'gamemode=survival'
+          } > server/server.properties
+
+      - name: Start server and wait for the plugin to enable
+        run: |
+          cd server
+          nohup java -Xms512M -Xmx1G -jar paper.jar nogui > server.log 2>&1 &
+          echo $! > ../server.pid
+          for i in $(seq 1 150); do
+            if grep -q 'Done (' server.log; then echo "server ready after ~$((i * 2))s"; break; fi
+            if grep -q 'Error occurred while enabling VigilAC' server.log; then
+              echo "::error title=PluginEnableFailed::VigilAC threw during enable"
+              exit 1
+            fi
+            if ! kill -0 "$(cat ../server.pid)" 2>/dev/null; then
+              echo "::error title=ServerDied::Paper process exited during boot"
+              tail -n 60 server.log || true
+              exit 1
+            fi
+            sleep 2
+          done
+          grep -q 'Done (' server.log || { echo "::error title=ServerTimeout::server did not report ready in 300s"; tail -n 60 server.log; exit 1; }
+          grep -q 'VigilAC enabled:' server.log || { echo "::error title=PluginNotEnabled::VigilAC success marker not found in server.log"; exit 1; }
+
+      - name: "RCON: plugins, vigilac info, vigilac violations"
+        run: |
+          esc () { tr '\n' '|' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | head -c 350; }
+          echo '::notice title=RconStep::starting RCON probes'
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci plugins > rcon-plugins.txt 2> rcon-plugins.err
+          rc1=$?
+          echo "::notice title=RconPlugins::rc=$rc1 out=$(esc < rcon-plugins.txt) err=$(esc < rcon-plugins.err)"
+          if [ $rc1 -ne 0 ]; then echo "::error title=RconPlugins::rc=$rc1 err=$(esc < rcon-plugins.err)"; exit 1; fi
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci vigilac info > rcon-info.txt 2> rcon-info.err
+          rc2=$?
+          echo "::notice title=RconInfo::rc=$rc2 out=$(esc < rcon-info.txt) err=$(esc < rcon-info.err)"
+          if [ $rc2 -ne 0 ]; then echo "::error title=RconInfo::rc=$rc2 err=$(esc < rcon-info.err)"; exit 1; fi
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci vigilac violations > rcon-violations.txt 2> rcon-violations.err
+          rc3=$?
+          echo "::notice title=RconViolations::rc=$rc3 out=$(esc < rcon-violations.txt) err=$(esc < rcon-violations.err)"
+          if [ $rc3 -ne 0 ]; then echo "::error title=RconViolations::rc=$rc3 err=$(esc < rcon-violations.err)"; exit 1; fi
+          if ! grep -qi vigilac rcon-plugins.txt; then echo '::error title=RconPlugins::vigilac not present in /plugins output'; exit 1; fi
+          if ! grep -qi 'VigilAC' rcon-info.txt; then echo '::error title=RconInfo::VigilAC not present in /vigilac info output'; exit 1; fi
+          echo '::notice title=RconStep::all RCON probes passed'
+
+      - name: "Server log: first ERROR block (diagnostic)"
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          lines = open('server/server.log', encoding='utf8', errors='replace').read().splitlines()
+          idx = None
+          for i, line in enumerate(lines):
+              if 'ERROR' in line or 'Exception' in line or 'Caused' in line:
+                  idx = i
+                  break
+          if idx is None:
+              print('::notice title=ServerLogError::no ERROR lines found')
+          else:
+              block = ' | '.join(lines[max(0, idx - 2):idx + 24])
+              block = block.replace('%', '%25').replace('\r', ' ').replace('\n', ' ')
+              print('::error title=ServerLogError::' + block[:1900])
+          PYEOF
+
+      - name: Server log tail (diagnostic)
+        if: always()
+        run: |
+          echo "::notice title=ServerLog::$(tail -c 4000 server/server.log | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | head -c 2000)"
+
+      - name: Stop server and verify clean shutdown + SQLite file
+        run: |
+          python3 tools/rcon.py 127.0.0.1 25575 vigilac-ci stop || true
+          for i in $(seq 1 45); do
+            kill -0 "$(cat server.pid)" 2>/dev/null || break
+            sleep 2
+          done
+          echo '--- server.log tail ---'
+          tail -n 80 server/server.log
+          grep -q 'Disabling VigilAC' server/server.log || { echo "::error title=PluginNotDisabled::Disabling VigilAC not found in server.log"; exit 1; }
+          ls -la server/plugins/VigilAC/vigilac-violations.db || { echo "::error title=StorageMissing::vigilac-violations.db was not created"; exit 1; }
+          if grep -Ei 'exception|severe' server/server.log | grep -i vigilac; then
+            echo "::error title=PluginException::VigilAC logged an exception or severe during the run"
+            exit 1
+          fi
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-server-log-${{ matrix.paper }}
+          path: server/server.log
+
+  load:
+    # workflow_dispatch when permitted; else any push whose head commit message contains [load] (CI token cannot create dispatch events)
+    name: Load test (${{ inputs.load_bots || '10' }} bots)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message || '', '[load')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Load test
+        env:
+          LOAD_INPUT_BOTS: ${{ inputs.load_bots }}
+          LOAD_INPUT_DURATION: ${{ inputs.load_duration }}
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          msg="${HEAD_MSG:-}"
+          bots="${LOAD_INPUT_BOTS:-10}"; dur="${LOAD_INPUT_DURATION:-45}"
+          if [[ "$msg" =~ \[load=([0-9]+)\] ]]; then bots="${BASH_REMATCH[1]}"; fi
+          if [[ "$msg" =~ \[dur=([0-9]+)\] ]]; then dur="${BASH_REMATCH[1]}"; fi
+          echo "== resolved load test: BOTS=$bots DURATION=${dur}s (inputs: '${LOAD_INPUT_BOTS}/${LOAD_INPUT_DURATION}') =="
+          BOTS="$bots" DURATION_SECONDS="$dur" ./integration/load.sh
+
+      - name: Upload load-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-${{ inputs.load_bots }}bots
+          path: |
+            integration/out-load/**
+            integration/load-server/server.log
+            integration/load-server/gc.log
+          if-no-files-found: warn
