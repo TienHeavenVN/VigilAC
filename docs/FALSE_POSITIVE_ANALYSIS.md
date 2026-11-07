@@ -162,3 +162,15 @@ removed. The scenarios remain in the harness and honestly report FAIL ("expect:
 auto-clicker/aim-assist VL > 0" unmet) because the environment cannot deliver the
 required event stream. They are reclassified below as **Unable-to-trigger in CI**, not
 as broken detections.
+
+## Phase 6 note — multi-signal combat (2026-11-07)
+
+The Phase 5 finding below — KillAura's verdict resting solely on "3 distinct
+damaged entities / 1 s" — is now closed by the multi-signal redesign documented in
+`CHECKS.md` and `PHASE_6_IMPLEMENTATION.md`: the anchor never flags alone; a second,
+independent stream (metronomic cadence / packetevents attempt rate / swingless-attack
+ratio) is required. AutoClicker's rate gate now also considers the attempt stream
+(misses), and the metronome evidence now reports CV and Shannon entropy in debug
+lines for post-mortem analysis. These are detection-logic changes, validated by new
+unit tests in CI; they were not & are not covered by real hack-client runs (BLOCKED —
+see `DETECTION_VALIDATION.md`).
