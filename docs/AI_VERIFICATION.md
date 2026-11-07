@@ -54,7 +54,7 @@ Honesty contract: this document contains only what was actually measured. Where 
   expectation (0 = unknown floor) was correct and is now satisfied by the code.
 - Load test / runtime smoke / live bot harness jobs were `skipped` in these runs (they are
   gated); no runtime smoke of the AI command has been performed by CI either.
-- This docs-sync commit does not change source; its own CI result is the commit's check status.
+- `48a3664` — CI run [42391382642](https://github.com/TienHeavenVN/VigilAC/actions/runs/42391382642): **success** (docs-only sync of this section).
 
 ## Commands used
 
