@@ -93,6 +93,15 @@ public final class PlayerMoveListener implements Listener {
         Block feet = to.getBlock();
         Block head = feet.getRelative(0, 1, 0);
         boolean inLiquid = feet.isLiquid();
+        // Feet are dry but the block directly below is water: vanilla-impossible
+        // unless the boots carry Frost Walker. Frost Walker converts water to
+        // ice (feet end on ice, not water), but a fresh layer of frost that
+        // re-melts between ticks can still read as water-below on one tick —
+        // hence the frostWalker flag is reported separately instead of folding
+        // it into inLiquid.
+        boolean onWaterSurface = !inLiquid && feet.getRelative(0, -1, 0).getType() == Material.WATER;
+        org.bukkit.inventory.ItemStack boots = player.getInventory().getBoots();
+        boolean frostWalker = boots != null && boots.containsEnchantment(org.bukkit.enchantments.Enchantment.FROST_WALKER);
         boolean slippery = isSlippery(feet.getType());
         boolean inWeb = feet.getType() == org.bukkit.Material.COBWEB || head.getType() == org.bukkit.Material.COBWEB;
         org.bukkit.Material feetType = feet.getType();
@@ -133,6 +142,8 @@ public final class PlayerMoveListener implements Listener {
                 .onSlipperyBlock(slippery)
                 .inWeb(inWeb)
                 .onSlowBlock(onSlowBlock)
+                .onWaterSurface(onWaterSurface)
+                .frostWalker(frostWalker)
                 .teleportGrace(data.isTeleportGrace())
                 .knockbackGrace(data.isKnockbackGrace())
                 .speedPotionLevel(speedLevel)

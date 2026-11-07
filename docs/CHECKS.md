@@ -191,6 +191,48 @@ travel is what jump-boost raises (max ~1.36 blocks/tick with Jump Boost X, far u
 4.25 bound is safe. Pistons and explosions displace entities horizontally/vertically at up to
 ~1 block/tick — still under the bound.
 
+## `jesus` — walking or standing on water (Phase 6)
+
+**Signal.** Dry feet while the block directly below is water — vanilla-impossible
+without Frost Walker (vanilla sinks the player or the feet enter the liquid).
+Consecutive qualifying observations are streak-counted; ≥ `min-streak` (default 14,
+i.e. ~0.7 s) ticks opens evidence, after which every qualifying observation adds
+`vl-per-tick` (default 0.5). Any disqualifying tick (entering liquid, Frost Walker,
+vehicle, gliding, Levitation/Slow Falling, teleport/velocity grace, TPS < 10) resets
+the streak.
+
+**False-positive considerations.** Frost Walker (any level) is a hard exemption — it
+is vanilla water walking. Boats, elytra, Levitation and Slow Falling are exempt.
+Swimming resets the streak (feet enter `inLiquid`), so water travel never accumulates.
+Jump arcs over water: feet dip into liquid between arcs, resetting the streak —
+repeated arcs cannot reach 14. Standing still above water is equally impossible in
+vanilla and is flagged by the same rule.
+
+**Known limits.** Waterlogged top slabs read as WATER material at the
+below-block lookup; standing on one can supply surface ticks. The 14-tick gate keeps
+this from firing on its own. A frost-walker switch-off (boots removed mid-stream)
+starts counting from zero — harmless.
+
+## `step` — silent full-block climb (Phase 6)
+
+**Signal.** A single-tick upward delta above `max-legal-delta` (default 0.95 —
+vanilla auto-step is 0.6; 0.95 clears jitter and Jump Boost ≤ IV). Two CONSECUTIVE
+impossibilities (`min-streak`, default 2) are required before VL accrues, each adding
+`vl-per-step` (default 2.5). A single legal/ambiguous tick resets the streak.
+
+**False-positive considerations.** Pistons are covered by the piston confounder
+(velocity grace resets the streak every tick a piston corridor player is displaced).
+Levitation, vehicles, elytra and teleports are exempt. Stairs/half slabs (0.5),
+carpet (0.125) are far under the threshold.
+
+**Known limits.** Jump Boost VI+ opening ticks exceed 0.95 (0.42 + 0.1 per level): a
+single JB VI arc contributes one streak tick (which resets at the apex), so it can
+never cross the 2-tick streak gate on its own — this is pinned by a unit test.
+Sneak-charged full slime-bounces can exceed 0.95 on the launch tick; likewise gated
+by the streak requirement. Both are documented rather than exempt because exempting
+them would blind the check to the hack.
+
+
 ## `kill-aura` — multi-target attacks (v2, Phase 6)
 
 **Signal.** Independent evidence streams are combined (never a single trigger):

@@ -42,6 +42,10 @@ public final class DetectionContext {
     private final boolean inWeb;
     /** Standing on a block that slows horizontal movement (soul sand/soil, honey, berry bush). */
     private final boolean onSlowBlock;
+    /** Feet are NOT in liquid but the block directly below is water — the "walking on water" signature. */
+    private final boolean onWaterSurface;
+    /** Feet equipment carries the Frost Walker enchantment (vanilla legal water walking). */
+    private final boolean frostWalker;
 
     private DetectionContext(Builder b) {
         this.player = b.player;
@@ -77,6 +81,8 @@ public final class DetectionContext {
         this.slowFalling = b.slowFalling;
         this.inWeb = b.inWeb;
         this.onSlowBlock = b.onSlowBlock;
+        this.onWaterSurface = b.onWaterSurface;
+        this.frostWalker = b.frostWalker;
     }
 
     public java.util.UUID getPlayer() { return player; }
@@ -116,6 +122,10 @@ public final class DetectionContext {
     public boolean isInWeb() { return inWeb; }
     /** Standing on a movement-slowing block (soul sand/soil, honey, berry bush). */
     public boolean isOnSlowBlock() { return onSlowBlock; }
+    /** Feet are dry but the block below is water (vanilla-impossible without Frost Walker). */
+    public boolean isOnWaterSurface() { return onWaterSurface; }
+    /** Boots carry Frost Walker — vanilla legal walking on water. */
+    public boolean hasFrostWalker() { return frostWalker; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -159,6 +169,8 @@ public final class DetectionContext {
         public Builder slowFalling(boolean slowFalling) { this.slowFalling = slowFalling; return this; }
         public Builder inWeb(boolean inWeb) { this.inWeb = inWeb; return this; }
         public Builder onSlowBlock(boolean onSlowBlock) { this.onSlowBlock = onSlowBlock; return this; }
+        public Builder onWaterSurface(boolean onWaterSurface) { this.onWaterSurface = onWaterSurface; return this; }
+        public Builder frostWalker(boolean frostWalker) { this.frostWalker = frostWalker; return this; }
 
         public DetectionContext build() {
             if (player == null) {

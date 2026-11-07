@@ -430,7 +430,7 @@ None of the above were assumed; all were read in source.
 - Full Grim-style movement simulation + setback (needs compensated world; rewrite).
 - Transaction-ordered latency compensation for verdicts.
 - Client tick accounting for Timer (needs transaction pipeline).
-- Jesus/Step/Spider/InventoryCheck new detectors (insufficient validation without real clients).
+- Jesus/Step new detectors — initially listed here; later implemented in a follow-up commit (v1, UNIT_TESTED only, REAL_CLIENT_VALIDATION=BLOCKED). Spider and InventoryMove remain NOT_IMPLEMENTED.
 - Themis-derived algorithms (repo unavailable).
 
 ## 9. License and attribution

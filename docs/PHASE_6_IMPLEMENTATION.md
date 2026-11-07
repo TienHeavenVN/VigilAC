@@ -76,7 +76,19 @@ runtime behavior on a live server **not verified**. Commits `97f6961`, fix `7e81
   attempt-rate gate is the honest replacement signal. No threshold was loosened.
 * **Reach** unchanged; existing gates and EMA logic retained.
 
-### Movement (6C-B) — commit `53dc362`
+### Movement (6C-B) — commit `53dc362`; jesus/step follow-up commit
+
+* **Fly** v2: low-gradient sink signature added.
+* **Jesus** v1 (NEW, follow-up commit): dry-feet-above-water with 14-tick streak
+  gate and Frost Walker exemption. UNIT_TESTED; NOT REAL_CLIENT_VERIFIED.
+* **Step** v1 (NEW, follow-up commit): single-tick rise > 0.95, streak of 2 gate.
+  Piston/velocity grace covered. UNIT_TESTED; NOT REAL_CLIENT_VERIFIED.
+* **Spider** v1: NOT_IMPLEMENTED — needs an adjacent-solid-block probe and
+  climbable-material awareness (ladders, vines, scaffolding, waterlogged decor);
+  shipping it blind would manufacture FPs on every climbable-adjacent wall climb.
+* **InventoryMove**: NOT_IMPLEMENTED — no packet-level GUI-open telemetry; and
+  vanilla permits full movement with the inventory screen open, so it is weak
+  evidence at best ("if data allows" was explicitly not met).
 
 * **Fly**: new low-gradient sink signature — descent < 0.04 blocks/tick across ≥ 40
   airborne observations (≈ vanilla-gravity impossible). Hover/rising logic unchanged.
@@ -145,13 +157,17 @@ v2 note.
 * `NoFallProbeTest` — unsupported claim flags; probe exception never convicts.
 * `CorrelationStatusTest`, `CorrelationMonitorPropagationTest` — tri-state + propagation.
 * `AttackGeometry` is exercised via the combat check tests.
+* `JesusCheckTest` — streak gate (>= 14 ticks), Frost Walker exemption, liquid-dip
+  reset, arc-vs-streak, grace/TPS suppression.
+* `StepCheckTest` — streak gate (2 consecutive), vanilla auto-step, piston grace,
+  Jump Boost VI arc limitation pinned by test.
 
 ## 7. NOT_IMPLEMENTED / out of scope (explicit)
 
 * Grim-style full movement simulation + compensated world + setback teleport.
 * Transaction-ordered latency compensation for verdicts.
 * Timer client-tick accounting.
-* Jesus / Step / Spider / InventoryMove new detectors.
+* Spider / InventoryMove new detectors.
 * Themis-derived algorithms (repository does not exist).
 * Signal-to-action automation for combat (KillAura/AimAssist remain alert-only by default;
   punishment mode unchanged and explicitly never automatic from this phase).

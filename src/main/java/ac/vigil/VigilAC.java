@@ -10,8 +10,10 @@ import ac.vigil.check.combat.KillAuraCheck;
 import ac.vigil.check.combat.ReachCheck;
 import ac.vigil.check.movement.FlyCheck;
 import ac.vigil.check.movement.InvalidMovementCheck;
+import ac.vigil.check.movement.JesusCheck;
 import ac.vigil.check.movement.NoFallCheck;
 import ac.vigil.check.movement.SpeedCheck;
+import ac.vigil.check.movement.StepCheck;
 import ac.vigil.check.movement.TimerCheck;
 import ac.vigil.check.player.FastBreakCheck;
 import ac.vigil.check.player.FastPlaceCheck;
@@ -189,6 +191,13 @@ public final class VigilAC extends JavaPlugin {
         checkManager.register(new InvalidMovementCheck(
                 cfg.invalidMaxVerticalDelta(),
                 cfg.invalidVlPerImpossibility()));
+        checkManager.register(new JesusCheck(
+                cfg.jesusMinStreak(),
+                cfg.jesusVlPerTick()));
+        checkManager.register(new StepCheck(
+                cfg.stepMaxLegal(),
+                cfg.stepMinStreak(),
+                cfg.stepVlPerStep()));
         // Combat
         checkManager.register(new KillAuraCheck(
                 cfg.killAuraWindowMillis(),

@@ -61,13 +61,37 @@ Legend: ✅ verified via unit tests · ◐ partial (logic pure & tested; live be
 | `no-fall` | ✅ incl. probe-failure safety | CI vanilla silent | ✗ | Server-collision probe runtime-unverified in CI (no world in unit tests); Bukkit impl is thin and reviewed |
 | `speed` | ✅ incl. web/slow-block caps | CI vanilla silent | ✗ | friction multipliers unit-tested via context injection |
 | `fly` | ✅ incl. low-gradient sink | CI vanilla silent | ✗ | |
+| `jesus` | ✅ streak gate, Frost Walker exempt | n/a (no harness water pad) | ✗ | v1; waterlogged-slab note in CHECKS.md; NOT_REAL_CLIENT_VERIFIED |
+| `step` | ✅ streak gate, piston grace | n/a | ✗ | v1; JB VI+ opening-tick ceiling documented; NOT_REAL_CLIENT_VERIFIED |
 | `timer` | ✅ (existing) | CI vanilla silent | ✗ | rate still wall-clock based; client-tick accounting (Grim-style) NOT_IMPLEMENTED |
 | packet telemetry | ✅ tracker unit tests | n/a (no PE in CI) | ✗ | packetevents present at runtime → engages; absent → all attempt paths degrade silently, checks keep event-driven behavior |
 
 ## 4. CI live harness results on this branch
 
-Filled in when the runs complete (push `226d6bf`, `97f6961`, `3e930e3`, `7e8150f`,
-`53dc362`, `8854345`). See [PERFORMANCE_BENCHMARK.md](PERFORMANCE_BENCHMARK.md) for load figures.
+Authoritative run `42355594181` (head `90312e9`) — **all jobs green**, both live
+bot harness legs:
+
+- leg (0): legit 15/16 clean, illegal 7/10 detected, unable 2, non-pass 6
+- leg (1): legit 15/16 clean, illegal 9/10 detected, unable 2, non-pass 4
+- VL totals (leg 1): timer 54, illegal-autoclick 48, illegal-fly 3, illegal-killaura 4,
+  legit-sprint-jump:speed 93–94 (***known harness artifact*** — the bot never sends
+  sprint state, so the server reads sprint=false and the sprint-jump EMA sits over the
+  walk cap; documented since Phase 4, unchanged by Phase 6).
+- Vanilla FP profile is identical to Phase 5: same 15/16, same known artifact, no new
+  FP on `legit-attack-zombie` (auto-clicker=1 / aim-assist=1 v2 corroboration floors),
+  no detection on `legit-mine-stone`, `legit-bridge`, `legit-fall-nodamage`.
+- Detection deltas vs Phase 5 on the synthetic illegal set (timer 53→54,
+  illegal-fastplace 9/23, illegal-killaura 0/4 — leg-dependent, bounded by the 1.21.2+
+  server-side cooldown limiting combat damage evidence).
+- no-fall and fast-break remain `UNABLE` for the protocol-bot harness (it cannot break
+  blocks at survival rates or produce real falls; the no-fall scenario verifies the
+  probe logs but cannot convict) — unchanged from Phase 4/5.
+
+Interpretation bound: the live harness is a **protocol bot**, not a real client. VL on
+an "illegal" scenario means the check fired on synthetic bot behavior, and silence on
+a "legit" scenario bounds false positives only for bot-shaped vanilla behavior.
+
+See [PERFORMANCE_BENCHMARK.md](PERFORMANCE_BENCHMARK.md) for load figures.
 
 ## 5. Manual test protocol (for a human with a real client)
 

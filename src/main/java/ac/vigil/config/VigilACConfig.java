@@ -60,7 +60,8 @@ public final class VigilACConfig {
 
     private static final String[] KNOWN_CHECKS = {
         "speed", "reach", "fly", "timer", "no-fall", "invalid-movement",
-        "kill-aura", "auto-clicker", "aim-assist", "scaffold", "fast-place", "fast-break"
+        "kill-aura", "auto-clicker", "aim-assist", "scaffold", "fast-place", "fast-break",
+        "jesus", "step"
     };
 
     /**
@@ -108,6 +109,13 @@ public final class VigilACConfig {
 
     public double invalidMaxVerticalDelta() { return getDouble("checks.invalid-movement.max-vertical-delta", 4.25D); }
     public double invalidVlPerImpossibility() { return getDouble("checks.invalid-movement.vl-per-impossibility", 4.0D); }
+
+    public int jesusMinStreak() { return getInt("checks.jesus.min-streak", 14); }
+    public double jesusVlPerTick() { return getDouble("checks.jesus.vl-per-tick", 0.5D); }
+
+    public double stepMaxLegal() { return getDouble("checks.step.max-legal-delta", 0.95D); }
+    public int stepMinStreak() { return getInt("checks.step.min-streak", 2); }
+    public double stepVlPerStep() { return getDouble("checks.step.vl-per-step", 2.5D); }
 
     public long killAuraWindowMillis() { return (long) (getDouble("checks.kill-aura.window-millis", 1_000.0D)); }
     public int killAuraMinTargets() { return getInt("checks.kill-aura.min-targets", 3); }
