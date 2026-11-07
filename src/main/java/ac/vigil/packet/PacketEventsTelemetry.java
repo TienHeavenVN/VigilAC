@@ -16,7 +16,6 @@ import com.github.retrooper.packetevents.event.UserDisconnectEvent;
 import com.github.retrooper.packetevents.event.UserLoginEvent;
 import com.github.retrooper.packetevents.event.PacketEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.protocol.player.InteractAction;
 import com.github.retrooper.packetevents.protocol.world.Location;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
@@ -112,7 +111,7 @@ final class PacketEventsTelemetry {
                         data.monitor().noteAttackAttempt("entity=" + entityId + " src=ATTACK");
                     } else if (rawType == PacketType.Play.Client.INTERACT_ENTITY) {
                         WrapperPlayClientInteractEntity interact = new WrapperPlayClientInteractEntity(event);
-                        if (interact.getAction() == InteractAction.ATTACK) {
+                        if (interact.getAction() == WrapperPlayClientInteractEntity.InteractAction.ATTACK) {
                             data.attackAttemptLedger().noteAttempt(now, interact.getEntityId());
                             data.monitor().noteAttackAttempt("entity=" + interact.getEntityId() + " src=INTERACT_ENTITY");
                         }
