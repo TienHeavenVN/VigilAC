@@ -13,6 +13,7 @@ import java.util.UUID;
 public final class PlayerData {
 
     private final UUID uuid;
+    private final java.util.function.LongSupplier clock;
     private final long joinTimeMillis;
     private final ac.vigil.data.tracking.MovementTracker movement = new ac.vigil.data.tracking.MovementTracker();
     private final ac.vigil.data.tracking.CombatTracker combat = new ac.vigil.data.tracking.CombatTracker();
@@ -38,14 +39,21 @@ public final class PlayerData {
     private long teleportGraceUntil;
 
     private final java.util.concurrent.atomic.AtomicLong packetCount = new java.util.concurrent.atomic.AtomicLong();
-    private long packetWindowStart = System.currentTimeMillis();
+    private long packetWindowStart;
     private volatile double packetsPerSecond;
 
     private boolean debug;
 
     public PlayerData(UUID uuid) {
+        this(uuid, System::currentTimeMillis);
+    }
+
+    /** Test-visible constructor: every internal timestamp derives from {@code clock}. */
+    public PlayerData(UUID uuid, java.util.function.LongSupplier clock) {
         this.uuid = uuid;
-        this.joinTimeMillis = System.currentTimeMillis();
+        this.clock = clock;
+        this.joinTimeMillis = clock.getAsLong();
+        this.packetWindowStart = this.joinTimeMillis;
     }
 
     public UUID getUuid() {
@@ -61,7 +69,7 @@ public final class PlayerData {
         double current = violationLevels.getOrDefault(checkName, 0.0D);
         double next = Math.min(maxVl, current + amount);
         violationLevels.put(checkName, next);
-        long now = System.currentTimeMillis();
+        long now = clock.getAsLong();
         lastViolationAt.put(checkName, now);
         firstViolationAt.putIfAbsent(checkName, now);
         return next;
@@ -84,7 +92,7 @@ public final class PlayerData {
      * {@code decayDelayMillis}. Returns true if any VL changed.
      */
     public synchronized boolean decay(double amountPerDecayTick, long decayDelayMillis) {
-        long now = System.currentTimeMillis();
+        long now = clock.getAsLong();
         boolean changed = false;
         for (Map.Entry<String, Double> entry : violationLevels.entrySet()) {
             Long last = lastViolationAt.get(entry.getKey());
@@ -203,16 +211,16 @@ public final class PlayerData {
     }
 
     public boolean isKnockbackGrace() {
-        return System.currentTimeMillis() < knockbackGraceUntil;
+        return clock.getAsLong() < knockbackGraceUntil;
     }
 
     public boolean isTeleportGrace() {
-        return System.currentTimeMillis() < teleportGraceUntil;
+        return clock.getAsLong() < teleportGraceUntil;
     }
 
     /** Thread-safe packet throughput counter fed by the packet listener (any thread). */
-    public void notePacket() {
-        long now = System.currentTimeMillis();
+    public synchronized void notePacket() {
+        long now = clock.getAsLong();
         long count = packetCount.incrementAndGet();
         long windowStart = packetWindowStart;
         long elapsed = now - windowStart;

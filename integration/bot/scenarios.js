@@ -51,6 +51,15 @@ async function summonZombieNear(bot, api, offset, name) {
   return zombies[0] || null;
 }
 
+// AttackListener (and therefore every combat check) keys off
+// EntityDamageByEntityEvent: an attack only counts if it DEALS damage. A 20-HP
+// NoAI zombie dies in 2-4 swings, after which a 25-CPS barrage produces zero
+// events and combat VL reads 0 at RCON time no matter how mechanical the
+// clicking is. These targets are immortal on purpose: the combat checks stay
+// fed with real damage events for the full scenario. 1.20.5+ attribute NBT
+// uses id/base (lowercase) and Health is a float.
+const IMMORTAL_ZOMBIE = '{NoAI:1b,Health:10000f,Attributes:[{id:"minecraft:max_health",base:10000}]}';
+
 function attack(bot, entity) {
   bot._client.write('use_entity', { target: entity.id, mouse: 1, hand: 0 });
 }
@@ -80,6 +89,11 @@ define('legit-stand', { kind: 'legit', description: 'stand still 5s', expect: []
 
 define('legit-sprint-jump', { kind: 'legit', description: 'sprint-jump forward with turns 6s', expect: [] }, async (bot, api) => {
   bot.setControlState('sprint', true);
+  // Empirical check of the Phase-3 open question: does the server see the bot as
+  // sprinting? The server-side flag decides walk-vs-sprint cap selection in the
+  // speed check. Logged as raw evidence either way.
+  const spProbe = api.rcon(`data get entity ${api.result.username} Sprinting`);
+  api.result.evidence.push('Sprinting probe -> ' + String(spProbe).replace(/\n/g, ' ').slice(0, 140));
   for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
     await bot.look(yaw, 0, true);
     bot.setControlState('jump', true);
@@ -243,9 +257,9 @@ define('illegal-reach', { kind: 'illegal', description: 'attacks beyond 3.0+tole
   }
 });
 
-define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS on a single victim, re-summoning only after it dies (kill-aura isolated)', expect: ['auto-clicker'] }, async (bot, api) => {
+define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS on a single immortal victim (HP effectively infinite; kill-aura isolated)', expect: ['auto-clicker'] }, async (bot, api) => {
   const name = api.result.username;
-  api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ {NoAI:1b}`);
+  api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ ${IMMORTAL_ZOMBIE}`);
   await api.sleep(400);
     await api.sleep(400);
   const end = Date.now() + 12000;
@@ -253,7 +267,7 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
   while (Date.now() < end) {
     const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie');
     if (zombies.length === 0) {
-      api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ {NoAI:1b}`);
+      api.rcon(`execute at ${name} run summon minecraft:zombie ~2 ~ ~ ${IMMORTAL_ZOMBIE}`);
       resummons++;
       await api.sleep(600);
       continue;
@@ -266,10 +280,10 @@ define('illegal-autoclick', { kind: 'illegal', description: 'metronomic ~25 CPS 
   api.result.evidence.push(attacks + ' attacks in 12s (~' + Math.round(attacks / 12) + ' CPS), resummons=' + resummons);
 });
 
-define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinct zombies inside 1s window (HP verified)', expect: ['kill-aura'] }, async (bot, api) => {
+define('illegal-killaura', { kind: 'illegal', description: 'attacks on 4 distinct immortal zombies inside 1s window', expect: ['kill-aura'] }, async (bot, api) => {
   const name = api.result.username;
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }, { x: 0, z: 2 }, { x: 0, z: -2 }]) {
-    api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z} {NoAI:1b}`);
+    api.rcon(`execute at ${name} run summon minecraft:zombie ~${off.x} ~ ~${off.z} ${IMMORTAL_ZOMBIE}`);
   }
     await api.sleep(1500);
   const before = api.rcon(`execute at ${name} run data get entity @e[type=zombie,sort=nearest,limit=1] Health`);
@@ -360,9 +374,9 @@ define('fast-break-probe', { kind: 'probe', description: 'start+stop_destroy 20m
   api.result.evidence.push('6x 20ms dig bursts on floating stone sent; survival verifiable via [Rcon] STONE_SURVIVED chat lines above');
 });
 
-define('illegal-aimassist', { kind: 'illegal', description: 'four 180-degree snaps landing on targets', expect: ['aim-assist'] }, async (bot, api) => {
+define('illegal-aimassist', { kind: 'illegal', description: 'six 180-degree snaps landing on two immortal zombies', expect: ['aim-assist'] }, async (bot, api) => {
   for (const off of [{ x: 2, z: 0 }, { x: -2, z: 0 }]) {
-    api.rcon(`execute at ${api.result.username} run summon minecraft:zombie ~${off.x} ~ ~${off.z} {NoAI:1b}`);
+    api.rcon(`execute at ${api.result.username} run summon minecraft:zombie ~${off.x} ~ ~${off.z} ${IMMORTAL_ZOMBIE}`);
   }
     await api.sleep(1500);
   const zombies = Object.values(bot.entities).filter((e) => e.name === 'zombie').slice(0, 2);

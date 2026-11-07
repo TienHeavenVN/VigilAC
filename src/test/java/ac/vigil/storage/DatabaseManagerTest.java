@@ -58,4 +58,44 @@ class DatabaseManagerTest {
         manager.close();
         assertFalse(tempDir.resolve("never.db").toFile().exists(), "disabled storage must not create files");
     }
+
+    @Test
+    void enqueueAndFlushAfterCloseAreSafeNoOps() throws Exception {
+        // A maintenance tick racing plugin shutdown must never throw into the
+        // scheduler (RejectedExecutionException) nor write after close.
+        File db = tempDir.resolve("vigilac-test-close.db").toFile();
+        Logger logger = Logger.getLogger("vigilac-test-3");
+
+        DatabaseManager manager = new DatabaseManager(db, true, logger);
+        manager.start();
+        manager.enqueue(new ViolationRecord(UUID.randomUUID(), "speed", 2.0D, "debug", 1L));
+        manager.close();
+        assertDoesNotThrow(() -> {
+            manager.enqueue(new ViolationRecord(UUID.randomUUID(), "speed", 2.0D, "debug", 2L));
+            manager.flushIfDue();
+            manager.close(); // double close must be safe too
+        });
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.getAbsolutePath());
+             Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM violations")) {
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1), "only the pre-close record may be persisted");
+        }
+    }
+
+    @Test
+    void flushDiagnosticsAreExposed() throws Exception {
+        File db = tempDir.resolve("vigilac-test-flush.db").toFile();
+        DatabaseManager manager = new DatabaseManager(db, true, Logger.getLogger("vigilac-test-4"));
+        manager.start();
+        assertEquals(0L, manager.getTotalFlushedRows());
+        for (int i = 0; i < 3; i++) {
+            manager.enqueue(new ViolationRecord(UUID.randomUUID(), "reach", 1.0D, "debug", (long) i));
+        }
+        manager.flushIfDue();
+        manager.close();
+        assertEquals(3L, manager.getTotalFlushedRows(), "all queued rows must be accounted for");
+        assertEquals(3, manager.getLastBatchRows());
+        assertTrue(manager.getLastFlushNanos() > 0L, "flush latency must be measured");
+    }
 }

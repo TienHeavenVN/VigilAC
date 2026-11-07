@@ -6,6 +6,16 @@ on:
       - main
       - 'arena/**'
   pull_request:
+  workflow_dispatch:
+    inputs:
+      load_bots:
+        description: 'Concurrent bots for the load test'
+        type: choice
+        options: ['10', '25', '50', '100']
+        default: '25'
+      load_duration:
+        description: 'Load test duration (seconds)'
+        default: '45'
 
 permissions:
   checks: write
@@ -107,33 +117,105 @@ jobs:
             build/libs/VigilAC.jar.sha256
           if-no-files-found: error
 
-  compat:
-    name: Compat ${{ matrix.paper }}
+  build-26x:
+    name: Build VigilAC-26x artifact (JDK 25)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        paper:
-          - '1.21'
-          - '1.21.1'
-          - '1.21.3'
-          - '1.21.4'
-          - '1.21.5'
-          - '1.21.6'
-          - '1.21.7'
-          - '1.21.8'
-          - '1.21.9'
-          - '1.21.10'
-          - '1.21.11'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21 (Temurin)
+      - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve paper-api 26.2 (existence probe)
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/26.2-R0.1-SNAPSHOT/maven-metadata.xml")
+          echo "paper-api/26.2-R0.1-SNAPSHOT maven-metadata HTTP $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::error title=PaperApiMissing::io.papermc.paper:paper-api:26.2-R0.1-SNAPSHOT is not resolvable on repo.papermc.io (HTTP $CODE)"
+            exit 1
+          fi
+
+      - name: Compile against paper-api 26.2 (release 25)
+        run: |
+          set +e
+          ./gradlew shadowJar --no-daemon -PpaperApiVersion=26.2-R0.1-SNAPSHOT -PjavaRelease=25 -PartifactName=VigilAC-26x > compile.log 2>&1
+          code=$?
+          tail -n 30 compile.log
+          if [ $code -ne 0 ]; then
+            grep -E 'error:' compile.log | head -10 | while IFS= read -r line; do
+              printf '::error title=Compile26::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | cut -c1-500)"
+            done
+            exit $code
+          fi
+
+      - name: Verify class file version (must be >= 69 for Java 25)
+        run: |
+          python3 - <<'PYEOF'
+          import struct
+          data = open('build/libs/VigilAC-26x.jar', 'rb').read()
+          # Find the central directory end to list class entries
+          import zipfile
+          versions = set()
+          with zipfile.ZipFile('build/libs/VigilAC-26x.jar') as zf:
+              for name in zf.namelist():
+                  if name.endswith('.class'):
+                      raw = zf.read(name)[6:8]
+                      versions.add(struct.unpack('>H', raw)[0])
+          print('class file versions found:', sorted(versions))
+          if min(versions) < 69:
+              print('::error title=BytecodeBaseline::VigilAC-26x.jar contains class files older than 69 (Java 25) — the 26.x artifact is not safely isolated')
+              raise SystemExit(1)
+          PYEOF
+
+      - name: SHA-256 checksum
+        run: sha256sum build/libs/VigilAC-26x.jar | tee build/libs/VigilAC-26x.jar.sha256
+
+      - name: Upload VigilAC-26x.jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: VigilAC-26x
+          path: |
+            build/libs/VigilAC-26x.jar
+            build/libs/VigilAC-26x.jar.sha256
+          if-no-files-found: error
+
+  compat:
+    name: Compat ${{ matrix.paper }} (JDK ${{ matrix.jdk }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { paper: '1.21',    jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.1',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.3',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.4',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.5',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.6',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.7',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.8',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.9',  jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.10', jdk: '21', javaRelease: '21' }
+          - { paper: '1.21.11', jdk: '21', javaRelease: '21' }
+          # 26.x targets build against paper-api with --release 25 (JDK 25 required).
+          - { paper: '26.1.2',  jdk: '25', javaRelease: '25' }
+          - { paper: '26.2',    jdk: '25', javaRelease: '25' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.jdk }} (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '${{ matrix.jdk }}'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -150,7 +232,7 @@ jobs:
       - name: Compile against paper-api ${{ matrix.paper }}
         run: |
           set +e
-          ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT > compile.log 2>&1
+          ./gradlew compileJava --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT -PjavaRelease=${{ matrix.javaRelease }} > compile.log 2>&1
           code=$?
           tail -n 25 compile.log
           if [ $code -ne 0 ]; then
@@ -163,7 +245,7 @@ jobs:
       - name: Unit tests against paper-api ${{ matrix.paper }}
         run: |
           set +e
-          ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT > test.log 2>&1
+          ./gradlew test --no-daemon -PpaperApiVersion=${{ matrix.paper }}-R0.1-SNAPSHOT -PjavaRelease=${{ matrix.javaRelease }} > test.log 2>&1
           code=$?
           tail -n 25 test.log
           if [ $code -ne 0 ]; then
@@ -182,6 +264,49 @@ jobs:
           PYEOF
             exit $code
           fi
+
+  version-inventory:
+    name: Authoritative version inventory (Mojang manifest + paper-api probes)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Mojang version_manifest_v2 and probe every 1.21.x and 26.x release
+        run: |
+          set -uo pipefail
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -w '%{http_code}' -o version_manifest_v2.json "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json") || CODE="curl-failed"
+          echo "launchermeta HTTP $CODE"
+          head -c 200 version_manifest_v2.json; echo
+          if [ "$CODE" != "200" ]; then
+            echo "::error title=MojangManifest::could not fetch version_manifest_v2.json (HTTP $CODE) — the authoritative 1.21.x/26.x inventory cannot be established"
+            exit 1
+          fi
+          python3 - <<'PYEOF'
+          import json, re, subprocess
+          manifest = json.load(open('version_manifest_v2.json'))
+          releases = [r['id'] for r in manifest.get('releases', [])]
+          target = sorted({v for v in releases if re.fullmatch(r'1\.21(\.\d+)?', v) or re.fullmatch(r'26\.\d+(\.\d+)?', v)},
+                          key=lambda v: [int(p) for p in v.split('.')])
+          print('::notice title=Inventory::Mojang released 1.21.x/26.x versions: ' + ', '.join(target))
+          available, missing = [], []
+          for v in target:
+              url = f'https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/{v}-R0.1-SNAPSHOT/maven-metadata.xml'
+              code = subprocess.run(['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', url],
+                                    capture_output=True, text=True).stdout.strip()
+              print(f'::notice title=Probe-{v}::paper-api {v}-R0.1-SNAPSHOT maven-metadata HTTP {code}')
+              (available if code == '200' else missing).append(v)
+          print('::notice title=InventoryPaperApiAvailable::' + ', '.join(available))
+          print('::notice title=InventoryPaperApiMissing::' + (', '.join(missing) or 'none'))
+          with open('inventory.txt', 'w') as fh:
+              fh.write('mojang_releases=' + ','.join(target) + '\n')
+              fh.write('paper_api_available=' + ','.join(available) + '\n')
+              fh.write('paper_api_missing=' + ','.join(missing) + '\n')
+          PYEOF
+
+      - name: Upload inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-inventory
+          path: inventory.txt
+          if-no-files-found: warn
 
   live-bot:
     name: Live bot harness (Paper 1.21.8)
@@ -229,33 +354,41 @@ jobs:
           if-no-files-found: warn
 
   integration:
-    name: Runtime smoke test (Paper 1.21.8)
+    name: Runtime smoke test (Paper ${{ matrix.paper }})
     runs-on: ubuntu-latest
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { paper: '1.21.8', jdk: '21', paperApiVersion: '1.21.8-R0.1-SNAPSHOT', javaRelease: '21', artifactName: 'VigilAC' }
+          - { paper: '26.2',   jdk: '25', paperApiVersion: '26.2-R0.1-SNAPSHOT',   javaRelease: '25', artifactName: 'VigilAC-26x' }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21 (Temurin)
+      - name: Set up JDK ${{ matrix.jdk }} (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '${{ matrix.jdk }}'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build plugin
-        run: ./gradlew shadowJar --no-daemon -q
+      - name: Build plugin (${{ matrix.artifactName }})
+        run: ./gradlew shadowJar --no-daemon -q -PpaperApiVersion=${{ matrix.paperApiVersion }} -PjavaRelease=${{ matrix.javaRelease }} -PartifactName=${{ matrix.artifactName }}
 
-      - name: Download Paper 1.21.8 (Fill v3 API, SHA-256 verified)
+      - name: Download Paper ${{ matrix.paper }} (Fill v3 API, SHA-256 verified)
+        env:
+          PAPER_VERSION: ${{ matrix.paper }}
         run: |
           set -uo pipefail
           API="https://fill.papermc.io/v3/projects/paper"
           UA="VigilAC-CI/1.0.0 (github.com/TienHeavenVN/VigilAC)"
           mkdir -p server/plugins
-          CODE=$(curl -sS --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o builds.json "$API/versions/1.21.8/builds") || CODE="curl-failed"
-          echo "Fill v3 builds endpoint HTTP $CODE"
+          CODE=$(curl -sS --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o builds.json "$API/versions/$PAPER_VERSION/builds") || CODE="curl-failed"
+          echo "Fill v3 builds endpoint HTTP $CODE (version $PAPER_VERSION)"
           head -c 400 builds.json 2>/dev/null; echo
           BUILDID=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].id // "")' builds.json 2>/dev/null)
           NAME=$(jq -r 'map(select(.channel=="STABLE")) | (.[0].downloads["server:default"].name // "")' builds.json 2>/dev/null)
@@ -266,7 +399,7 @@ jobs:
             echo "::error title=PaperMeta::HTTP $CODE id='$BUILDID' name='$NAME' body: $BODY"
             exit 1
           fi
-          echo "Latest Paper 1.21.8 STABLE build: $BUILDID ($NAME)"
+          echo "Latest Paper $PAPER_VERSION STABLE build: $BUILDID ($NAME)"
           echo "URL: $URL"
           CODE2=$(curl -sSL --retry 3 --retry-delay 2 -H "User-Agent: $UA" -w '%{http_code}' -o server/paper.jar "$URL") || CODE2="curl-failed"
           echo "download HTTP $CODE2"
@@ -275,7 +408,7 @@ jobs:
 
       - name: Prepare server directory and properties
         run: |
-          cp build/libs/VigilAC.jar server/plugins/
+          cp build/libs/${{ matrix.artifactName }}.jar server/plugins/VigilAC.jar
           printf 'eula=true\n' > server/eula.txt
           {
             echo 'online-mode=false'
@@ -296,7 +429,7 @@ jobs:
           cd server
           nohup java -Xms512M -Xmx1G -jar paper.jar nogui > server.log 2>&1 &
           echo $! > ../server.pid
-          for i in $(seq 1 120); do
+          for i in $(seq 1 150); do
             if grep -q 'Done (' server.log; then echo "server ready after ~$((i * 2))s"; break; fi
             if grep -q 'Error occurred while enabling VigilAC' server.log; then
               echo "::error title=PluginEnableFailed::VigilAC threw during enable"
@@ -309,7 +442,7 @@ jobs:
             fi
             sleep 2
           done
-          grep -q 'Done (' server.log || { echo "::error title=ServerTimeout::server did not report ready in 240s"; tail -n 60 server.log; exit 1; }
+          grep -q 'Done (' server.log || { echo "::error title=ServerTimeout::server did not report ready in 300s"; tail -n 60 server.log; exit 1; }
           grep -q 'VigilAC enabled:' server.log || { echo "::error title=PluginNotEnabled::VigilAC success marker not found in server.log"; exit 1; }
 
       - name: "RCON: plugins, vigilac info, vigilac violations"
@@ -331,24 +464,6 @@ jobs:
           if ! grep -qi vigilac rcon-plugins.txt; then echo '::error title=RconPlugins::vigilac not present in /plugins output'; exit 1; fi
           if ! grep -qi 'VigilAC' rcon-info.txt; then echo '::error title=RconInfo::VigilAC not present in /vigilac info output'; exit 1; fi
           echo '::notice title=RconStep::all RCON probes passed'
-
-      - name: "Server log: first ERROR block (diagnostic)"
-        if: always()
-        run: |
-          python3 - <<'PYEOF'
-          lines = open('server/server.log', encoding='utf8', errors='replace').read().splitlines()
-          idx = None
-          for i, line in enumerate(lines):
-              if 'ERROR' in line or 'Exception' in line or 'Caused' in line:
-                  idx = i
-                  break
-          if idx is None:
-              print('::notice title=ServerLogError::no ERROR lines found')
-          else:
-              block = ' | '.join(lines[max(0, idx - 2):idx + 24])
-              block = block.replace('%', '%25').replace('\r', ' ').replace('\n', ' ')
-              print('::error title=ServerLogError::' + block[:1900])
-          PYEOF
 
       - name: "Server log: first ERROR block (diagnostic)"
         if: always()
@@ -393,5 +508,44 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-server-log
+          name: integration-server-log-${{ matrix.paper }}
           path: server/server.log
+
+  load:
+    name: Load test (${{ inputs.load_bots }} bots, manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Load test
+        env:
+          BOTS: ${{ inputs.load_bots }}
+          DURATION_SECONDS: ${{ inputs.load_duration }}
+        run: ./integration/load.sh
+
+      - name: Upload load-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-${{ inputs.load_bots }}bots
+          path: |
+            integration/out-load/**
+            integration/load-server/server.log
+            integration/load-server/gc.log
+          if-no-files-found: warn

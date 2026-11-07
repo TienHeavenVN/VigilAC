@@ -40,7 +40,13 @@ public final class DatabaseManager {
     private final List<ViolationRecord> pending = new ArrayList<>();
     private Connection connection;
     private volatile boolean broken;
+    private volatile boolean closed;
+    private volatile boolean rejectionWarned;
     private long lastFlush = System.currentTimeMillis();
+    // Storage diagnostics (written on the storage thread, read by /vigilac info).
+    private volatile long lastFlushNanos;
+    private volatile int lastBatchRows;
+    private final java.util.concurrent.atomic.AtomicLong totalFlushedRows = new java.util.concurrent.atomic.AtomicLong();
 
     public DatabaseManager(File file, boolean enabled, Logger logger) {
         this.file = file;
@@ -94,23 +100,38 @@ public final class DatabaseManager {
         }
     }
 
-    /** Queues a violation record; safe to call from any thread, never blocks. */
+    /** Queues a violation record; safe to call from any thread, never blocks. After shutdown it is a no-op. */
     public void enqueue(ViolationRecord record) {
-        if (!enabled || broken) {
+        if (!enabled || broken || closed) {
             return;
         }
-        executor.execute(() -> {
-            pending.add(record);
-            maybeFlush(false);
-        });
+        try {
+            executor.execute(() -> {
+                pending.add(record);
+                maybeFlush(false);
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ex) {
+            warnRejected("enqueue");
+        }
     }
 
-    /** Called periodically (async) and at shutdown to drain the buffer. */
+    /** Called periodically (async) and at shutdown to drain the buffer. After shutdown it is a no-op. */
     public void flushIfDue() {
-        if (!enabled || broken) {
+        if (!enabled || broken || closed) {
             return;
         }
-        executor.execute(() -> maybeFlush(true));
+        try {
+            executor.execute(() -> maybeFlush(true));
+        } catch (java.util.concurrent.RejectedExecutionException ex) {
+            warnRejected("flushIfDue");
+        }
+    }
+
+    private void warnRejected(String caller) {
+        if (!rejectionWarned) {
+            rejectionWarned = true;
+            logger.warning("VigilAC storage rejected a task from " + caller + " (storage shutting down); record dropped");
+        }
     }
 
     private void maybeFlush(boolean force) {
@@ -125,6 +146,7 @@ public final class DatabaseManager {
         List<ViolationRecord> batch = new ArrayList<>(pending);
         pending.clear();
         lastFlush = now;
+        long startedAt = System.nanoTime();
         try {
             connection.setAutoCommit(false);
             try (PreparedStatement ps = connection.prepareStatement(
@@ -141,6 +163,9 @@ public final class DatabaseManager {
             }
             connection.commit();
             connection.setAutoCommit(true);
+            lastFlushNanos = System.nanoTime() - startedAt;
+            lastBatchRows = batch.size();
+            totalFlushedRows.addAndGet(batch.size());
         } catch (SQLException ex) {
             try {
                 connection.rollback();
@@ -157,6 +182,8 @@ public final class DatabaseManager {
         if (!enabled) {
             return;
         }
+        // Gate first: any concurrent enqueue/flush from a still-running task becomes a no-op.
+        closed = true;
         try {
             executor.submit(() -> maybeFlush(true)).get(5, TimeUnit.SECONDS);
         } catch (Exception ex) {
@@ -193,5 +220,20 @@ public final class DatabaseManager {
 
     public boolean isBroken() {
         return broken;
+    }
+
+    /** Nanoseconds the last committed batch took (0 before the first flush). */
+    public long getLastFlushNanos() {
+        return lastFlushNanos;
+    }
+
+    /** Rows written in the last committed batch (0 before the first flush). */
+    public int getLastBatchRows() {
+        return lastBatchRows;
+    }
+
+    /** Total rows committed since boot. */
+    public long getTotalFlushedRows() {
+        return totalFlushedRows.get();
     }
 }

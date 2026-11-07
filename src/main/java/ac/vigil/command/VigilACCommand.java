@@ -77,6 +77,9 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
             tps = tpsValues[0];
         }
         sender.sendMessage(Text.colorize("&6VigilAC &fv" + plugin.getDescription().getVersion()));
+        sender.sendMessage(Text.colorize("&7Server: &e" + Bukkit.getServer().getVersion()
+                + " &7| Java: &e" + System.getProperty("java.version")
+                + " &7| packetevents: &e" + plugin.getPacketEventsStatus()));
         sender.sendMessage(Text.colorize("&7Mode: &e" + (plugin.getVigilacConfig().isAlertOnly() ? "alert-only" : "punish")));
         sender.sendMessage(Text.colorize(String.format(java.util.Locale.US, "&7TPS: &e%.1f &7| Online: &e%d &7| Tracked: &e%d",
                 tps, Bukkit.getOnlinePlayers().size(), plugin.getPlayerDataManager().getTrackedCount())));
@@ -92,6 +95,13 @@ public final class VigilACCommand implements CommandExecutor, TabCompleter {
                 ? "broken (see console)"
                 : (plugin.getDatabaseManager().isEnabled() ? "enabled" : "disabled");
         sender.sendMessage(Text.colorize("&7Violation storage: &e" + storage));
+        if (plugin.getDatabaseManager().isEnabled() && plugin.getDatabaseManager().getTotalFlushedRows() > 0) {
+            sender.sendMessage(Text.colorize(String.format(java.util.Locale.US,
+                    "&7  storage: last flush &e%.2f ms&7 (%d rows), total &e%d rows flushed",
+                    plugin.getDatabaseManager().getLastFlushNanos() / 1_000_000.0D,
+                    plugin.getDatabaseManager().getLastBatchRows(),
+                    plugin.getDatabaseManager().getTotalFlushedRows())));
+        }
         if (sender instanceof Player player) {
             PlayerData data = plugin.getPlayerDataManager().get(player.getUniqueId());
             if (data != null) {

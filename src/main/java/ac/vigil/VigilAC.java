@@ -54,6 +54,7 @@ public final class VigilAC extends JavaPlugin {
     private PunishmentManager punishmentManager;
     private ExemptionManager exemptionManager;
     private ViolationPipeline pipeline;
+    private PacketEventsHook.Handle packetEventsHandle;
 
     @Override
     public void onEnable() {
@@ -93,7 +94,7 @@ public final class VigilAC extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new ConfounderListener(playerDataManager, this::getVigilacConfig), this);
 
-        PacketEventsHook.tryRegister(this, playerDataManager);
+        this.packetEventsHandle = PacketEventsHook.tryRegister(this, playerDataManager);
 
         VigilACCommand command = new VigilACCommand(this);
         if (getCommand("vigilac") != null) {
@@ -112,13 +113,33 @@ public final class VigilAC extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (databaseManager != null) {
-            databaseManager.close();
-        }
+        // 1) Stop the decay/flush scheduler first so a queued maintenanceTick can
+        //    never enqueue a record into a storage instance that is closing.
         if (getServer().getScheduler() != null) {
             getServer().getScheduler().cancelTasks(this);
         }
+        // 2) Unregister the packetevents listener so a /reload never leaves
+        //    stale listeners double-counting packet rates (which would feed the
+        //    raw timer-rate input with N× traffic).
+        if (packetEventsHandle != null) {
+            packetEventsHandle.unregister();
+            packetEventsHandle = null;
+        }
+        // 3) Flush and close violation storage (bounded wait).
+        if (databaseManager != null) {
+            databaseManager.close();
+            databaseManager = null;
+        }
         playerDataManager = null;
+    }
+
+    /** Human-readable packetevents status for /vigilac info. */
+    public String getPacketEventsStatus() {
+        return packetEventsHandle == null ? "not initialised" : packetEventsHandle.status();
+    }
+
+    public boolean isPacketEventsAvailable() {
+        return packetEventsHandle != null && packetEventsHandle.isAvailable();
     }
 
     /** Re-reads config.yml and swaps typed views; check tuning takes effect immediately. */

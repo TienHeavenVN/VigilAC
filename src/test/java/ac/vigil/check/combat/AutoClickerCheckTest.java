@@ -88,4 +88,19 @@ class AutoClickerCheckTest {
         }
         assertTrue(flagged.isEmpty(), "8 CPS with jitter is unremarkable combat");
     }
+
+    @Test
+    void fewerThanMinSamplesNeverFlags() {
+        // Documents the live-harness finding (Phase 4): attacks must DEAL
+        // damage to be observed (AttackListener keys off
+        // EntityDamageByEntityEvent). A 25-CPS bot that kills a weak NoAI
+        // zombie in <min-samples swings starves the rolling interval window
+        // completely — VL reads 0 at RCON time, no matter how fast the clicks.
+        long now = 1_000_000L;
+        for (int i = 0; i < 6; i++) { // 25 CPS while the target lives
+            now += 40L;
+            attack(now);
+        }
+        assertTrue(flagged.isEmpty(), "the interval window must not trigger below min-samples");
+    }
 }

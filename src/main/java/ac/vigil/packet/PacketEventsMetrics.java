@@ -25,12 +25,21 @@ final class PacketEventsMetrics {
     private PacketEventsMetrics() {
     }
 
-    static boolean register(JavaPlugin plugin, PlayerDataManager dataManager, String version) {
+    static MetricsListener register(JavaPlugin plugin, PlayerDataManager dataManager, String version) {
+        MetricsListener listener = new MetricsListener(dataManager, plugin.getLogger());
         PacketEvents.getAPI()
                 .getEventManager()
-                .registerListener(new MetricsListener(dataManager, plugin.getLogger()), PacketListenerPriority.NORMAL);
-        plugin.getLogger().info("Hooked into packetevents " + version);
-        return true;
+                .registerListener(listener, PacketListenerPriority.NORMAL);
+        return listener;
+    }
+
+    /** Unregisters the metrics listener (called on plugin disable). Never throws. */
+    static void unregister(MetricsListener listener) {
+        try {
+            PacketEvents.getAPI().getEventManager().unregisterListener(listener);
+        } catch (Throwable throwable) {
+            // packetevents itself is already unloading (or gone): nothing to unregister from.
+        }
     }
 
     /** Counts incoming packets per player using atomics only (netty-thread safe). */
