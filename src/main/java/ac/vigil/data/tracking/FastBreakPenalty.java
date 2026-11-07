@@ -19,7 +19,8 @@ public final class FastBreakPenalty {
     public static final double DEFAULT_HALF_LIFE_MILLIS = 3_000.0D;
 
     private double bucketMillis;
-    private long lastUpdateAt; // 0 when empty
+    private long lastUpdateAt;
+    private boolean initialized;
     private double halfLifeMillis = DEFAULT_HALF_LIFE_MILLIS;
 
     /** Adds {@code missingMillis} of unexplained dig-time deficit observed at {@code now}. */
@@ -47,6 +48,7 @@ public final class FastBreakPenalty {
     public synchronized void reset() {
         bucketMillis = 0.0D;
         lastUpdateAt = 0L;
+        initialized = false;
     }
 
     /** For tests and configuration. */
@@ -57,7 +59,8 @@ public final class FastBreakPenalty {
     }
 
     private void decayTo(long now) {
-        if (lastUpdateAt == 0L) {
+        if (!initialized) {
+            initialized = true;
             lastUpdateAt = now;
             return;
         }
