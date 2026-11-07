@@ -9,6 +9,10 @@ Shipped today (all with real detection logic, tunables and unit tests):
 - **Player**: `scaffold`, `fast-place`, `fast-break`.
 - **Compatibility CI**: per-version `paper-api` compile + unit-test matrix (see
   [COMPATIBILITY.md](COMPATIBILITY.md)); runtime smoke test booting real Paper 1.21.8 in CI.
+- **Continuous monitoring**: per-player state machine + bounded evidence ring (256 entries / 90 s TTL),
+  cause-separated damage signals, correlation engine (informational confidence), per-check detection
+  status (state/VL/confidence/evidence/exemption reason), `/vigilac monitor <player>`. See
+  [MONITORING.md](MONITORING.md).
 
 ## Next (not implemented — no stubs exist)
 

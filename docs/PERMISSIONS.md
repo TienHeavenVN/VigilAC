@@ -12,6 +12,7 @@ All permissions default to **op**.
 | `vigilac.debug` | Toggle per-player debug output; receive debug broadcasts. |
 | `vigilac.reload` | Reload `config.yml`. |
 | `vigilac.exempt` | **Bypass all checks.** Also grants the exemption toggle subcommand. Grant sparingly (staff, known-good builders). |
+| `vigilac.monitor` | View continuous monitoring state and per-check detection status for a player (`/vigilac monitor <player>`). |
 
 Notes:
 

@@ -64,6 +64,7 @@ Base permission: `vigilac.command` (default: op). Every subcommand checks its ow
 | `/vigilac debug [player] [on\|off]` | toggle per-player detection debug output | `vigilac.debug` |
 | `/vigilac reload` | reload `config.yml` | `vigilac.reload` |
 | `/vigilac exempt <player> [check\|*]` | toggle exemptions | `vigilac.exempt` |
+| `/vigilac monitor [player]` | continuous monitoring state + per-check detection status | `vigilac.monitor` |
 
 Full reference: [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 
